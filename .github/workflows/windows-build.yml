@@ -1,0 +1,40 @@
+name: Build Windows Otclient
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ runner.temp }}/vcpkg'
+          vcpkgGitCommitId: 'master'
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -A Win32 -DCMAKE_TOOLCHAIN_FILE=${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Pack artifacts
+        run: |
+          mkdir artifact
+          copy build\Release\otclient.exe artifact\
+          xcopy modules artifact\modules /E /I
+          xcopy data artifact\data /E /I
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: otclient-windows
+          path: artifact
