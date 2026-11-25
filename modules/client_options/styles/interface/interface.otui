@@ -14,6 +14,17 @@ UIWidget
   SmallReversedQtPanel
     anchors.left: parent.left
     anchors.right: parent.right
+    anchors.top: prev.bottom
+    margin-top: 7
+    height: 22
+
+    OptionCheckBox
+      id: brtibiaTemaClassico
+      !text: tr('Tema classico (cinza) - vale ao reiniciar o cliente')
+
+  SmallReversedQtPanel
+    anchors.left: parent.left
+    anchors.right: parent.right
     anchors.top: parent.top
     anchors.top: prev.bottom
     margin-top: 7

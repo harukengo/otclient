@@ -77,7 +77,7 @@ Panel
     margin-left: 4
     height: 17
     text: Profile #1
-    background: #292A2A
+    background: #00000066
 ]])
 ui:setId(healPanelName)
 

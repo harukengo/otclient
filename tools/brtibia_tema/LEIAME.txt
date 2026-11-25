@@ -1,0 +1,11 @@
+Gera o tema "marinho" (data/temas/marinho) a partir das imagens originais do cliente.
+Precisa de Python 3 com numpy, pillow e opencv-python.
+
+Para cada pasta: ui, inventory, game/actionbar, game/combatmodes, game/console,
+options, healthmana e bars:
+  python3 tema_marinho.py data/images/<pasta> data/temas/marinho/images/<pasta>
+Depois:
+  python3 tema_acabamento.py data/temas/marinho
+(cantos arredondados, neon, degrades e brilho das barras)
+
+data/temas/marinho/styles/10-textedits.otui e mantido a mao (fundo das caixas de texto).

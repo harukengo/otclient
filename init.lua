@@ -119,6 +119,19 @@ g_resources.searchAndAddPackages('/', '.otpkg', true)
 -- load settings
 g_configs.loadSettings('/config.otml')
 
+-- BRTibia: tema visual. "marinho" (padrao) = interface azul marinho com neon;
+-- "classico" = cinza original. As imagens do tema ficam em data/temas/<nome> e
+-- substituem as originais so enquanto o tema estiver ativo. Troca em Opcoes > Interface
+-- (vale ao reiniciar o cliente).
+do
+    local cfg = g_configs.getSettings()
+    local classico = cfg and cfg:exists('brtibiaTemaClassico') and cfg:getValue('brtibiaTemaClassico') == 'true'
+    BRTIBIA_TEMA = classico and 'classico' or 'marinho'
+    if BRTIBIA_TEMA ~= 'classico' then
+        g_resources.addSearchPath(g_resources.getWorkDir() .. 'data/temas/' .. BRTIBIA_TEMA, true)
+    end
+end
+
 g_modules.discoverModules()
 
 -- libraries modules 0-99

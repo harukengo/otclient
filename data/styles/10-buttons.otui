@@ -5,7 +5,8 @@ Button < UIButton
   text-offset: 0 2
   image-source: /images/ui/buttons
   image-clip: 0 0 43 20
-  image-border: 1
+  // BRTibia: 3 px fixos nos cantos (cantos arredondados do tema nao esticam)
+  image-border: 3
   padding: 10
   opacity: 1.0
   click-sound: 2774

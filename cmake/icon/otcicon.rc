@@ -1,1 +1,31 @@
 IDI_ICON1    ICON  DISCARDABLE    "otcicon.ico"
+
+// BRTibia: informacoes do arquivo (Propriedades > Detalhes e Gerenciador de Tarefas)
+1 VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          0x40004L
+FILETYPE        0x1L
+FILESUBTYPE     0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041604b0"
+        BEGIN
+            VALUE "CompanyName",      "BRTibia"
+            VALUE "FileDescription",  "BRTibia - Cliente 8.60"
+            VALUE "FileVersion",      "1.0.0.0"
+            VALUE "InternalName",     "BRTibia"
+            VALUE "LegalCopyright",   "BRTibia - baseado no OTClient Redemption (MIT)"
+            VALUE "OriginalFilename", "BRTibia.exe"
+            VALUE "ProductName",      "BRTibia"
+            VALUE "ProductVersion",   "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x416, 1200
+    END
+END

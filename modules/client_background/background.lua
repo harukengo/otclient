@@ -1,4 +1,5 @@
 -- private variables
+local BRTIBIA_VERSAO = '1.0'
 local background
 local clientVersionLabel
 local bgEffectEvent = nil
@@ -30,10 +31,8 @@ function init()
     ajustarFundo()
 
     clientVersionLabel = background:getChildById('clientVersionLabel')
-    clientVersionLabel:setText(g_app.getName() .. ' ' .. g_app.getVersion() .. '\n' .. 'Rev  ' ..
-                                   g_app.getBuildRevision() .. ' (' .. g_app.getBuildCommit() .. ')\n' .. 'Built on ' ..
-                                   g_app.getBuildDate() .. '\n' .. g_app.getBuildCompiler() .. ' - ' ..
-                                   g_app.getBuildArch())
+    -- BRTibia: versao propria no canto da tela (antes: "OTClient - BRTibia 4.x / Rev 0.000 (desenv)...")
+    clientVersionLabel:setText('BRTibia ' .. BRTIBIA_VERSAO .. '\n' .. 'Cliente 8.60 - ' .. g_app.getBuildDate())
 
     if not g_game.isOnline() then
         addEvent(function()

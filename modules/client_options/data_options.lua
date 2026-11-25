@@ -433,6 +433,12 @@ return {
             panels.gameMapPanel:setFloorFading(tonumber(value))
         end
     },
+    -- BRTibia: tema classico (cinza). Lido no init.lua ao abrir o cliente; muda ao reiniciar.
+    brtibiaTemaClassico               = {
+        value = false,
+        action = function(value, options, controller, panels, extraWidgets)
+        end
+    },
     asyncTxtLoading                   = {
         -- BR Tibia: ligado por padrao. O Tibia.spr do BRTibia tem 440 MB; desligado, o arquivo
         -- inteiro fica na memoria (~1,1 GB de uso). Ligado, as sprites sao lidas do disco em

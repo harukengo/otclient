@@ -165,8 +165,41 @@ local function loadServerListModule()
 end
 
 -- public functions
+-- BRTibia: sombra da janela de login, desenhada no fundo (abaixo da janela)
+local brtibiaSombra
+local function brtibiaAtualizarSombra()
+    if not brtibiaSombra or brtibiaSombra:isDestroyed() or not enterGame or enterGame:isDestroyed() then
+        return
+    end
+    if enterGame:isVisible() then
+        local r = enterGame:getRect()
+        brtibiaSombra:setRect({ x = r.x - 40, y = r.y - 30, width = r.width + 80, height = r.height + 82 })
+        brtibiaSombra:show()
+    else
+        brtibiaSombra:hide()
+    end
+end
+
+function brtibiaCriarSombra()
+    local fundo = rootWidget:getChildById('background')
+    if not fundo or not enterGame then
+        return
+    end
+    brtibiaSombra = g_ui.createWidget('UIWidget', fundo)
+    brtibiaSombra:setId('brtibiaSombraLogin')
+    brtibiaSombra:setImageSource('/images/brtibia_sombra')
+    brtibiaSombra:setImageBorder(50)
+    brtibiaSombra:setPhantom(true)
+    brtibiaSombra:setFocusable(false)
+    enterGame.onGeometryChange = brtibiaAtualizarSombra
+    enterGame.onVisibilityChange = brtibiaAtualizarSombra
+    brtibiaAtualizarSombra()
+end
+
 function EnterGame.init()
     enterGame = g_ui.displayUI('entergame')
+    -- BRTibia: sombra suave atras da janela de login (acompanha posicao e visibilidade)
+    addEvent(brtibiaCriarSombra)
     Keybind.new("Misc.", "Change Character", "Ctrl+G", "")
     Keybind.bind("Misc.", "Change Character", {
       {
@@ -365,6 +398,10 @@ function EnterGame.terminate()
         onGameEnd = EnterGame.showPanels
     })
 
+    if brtibiaSombra and not brtibiaSombra:isDestroyed() then
+        brtibiaSombra:destroy()
+    end
+    brtibiaSombra = nil
     if enterGame then
         enterGame:destroy()
         enterGame = nil

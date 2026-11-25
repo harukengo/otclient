@@ -404,6 +404,35 @@ end
 controller = Controller:new()
 controller:setUI('options')
 
+-- BRTibia: com a janela do jogo sem foco (outro programa na frente, dois clientes abertos),
+-- o FPS cai para 30 para economizar CPU, placa de video e bateria. Ao clicar no jogo, volta
+-- ao limite escolhido em Opcoes. O bot nao e afetado (funciona por tempo, nao por quadro).
+local BRTIBIA_FPS_SEM_FOCO = 30
+local brtibiaEventoFoco = nil
+local brtibiaSemFoco = false
+
+local function brtibiaLimiteNormal()
+    local v = tonumber(getOption('backgroundFrameRate')) or 501
+    if v <= 0 or v >= 501 then
+        return 0
+    end
+    return v
+end
+
+local function brtibiaVerificarFoco()
+    local semFoco = not g_window.hasFocus()
+    if semFoco == brtibiaSemFoco then
+        return
+    end
+    brtibiaSemFoco = semFoco
+    if semFoco then
+        local normal = brtibiaLimiteNormal()
+        g_app.setMaxFps((normal > 0 and normal < BRTIBIA_FPS_SEM_FOCO) and normal or BRTIBIA_FPS_SEM_FOCO)
+    else
+        g_app.setMaxFps(brtibiaLimiteNormal())
+    end
+end
+
 function controller:onInit()
     for k, obj in pairs(options) do
         if type(obj) ~= "table" then
@@ -507,9 +536,15 @@ function controller:onInit()
             callback = toggleMute,
         }
     })
+
+    brtibiaEventoFoco = cycleEvent(brtibiaVerificarFoco, 500)
 end
 
 function controller:onTerminate()
+    if brtibiaEventoFoco then
+        removeEvent(brtibiaEventoFoco)
+        brtibiaEventoFoco = nil
+    end
     -- Make sure all settings are saved before terminating
     g_settings.save()
     

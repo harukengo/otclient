@@ -11,6 +11,15 @@ Panel
   margin-top: 1
   focusable: false
 
+  // BRTibia: sombreamento do fundo (bordas e topo mais escuros, centro e logo em destaque)
+  UIWidget
+    id: brtibiaVinheta
+    anchors.fill: parent
+    image-source: /images/brtibia_vinheta
+    image-smooth: true
+    phantom: true
+    focusable: false
+
   UILabel
     id: clientVersionLabel
     background-color: #00000099

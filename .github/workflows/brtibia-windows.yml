@@ -21,3 +21,40 @@ jobs:
     name: Build - Windows
     uses: ./.github/workflows/reusable-build-windows.yml
     secrets: inherit
+
+  # BRTibia: monta a pasta do cliente pronta para distribuir (sem .pdb/.lib/.exp
+  # e sem Tibia.spr/Tibia.dat, que nao ficam no repositorio).
+  pacote:
+    name: Pacote do cliente
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Baixar executaveis
+        uses: actions/download-artifact@v4
+        with:
+          pattern: windows-solution-{directx,opengl}
+          path: exes
+          merge-multiple: true
+
+      - name: Montar pasta
+        shell: bash
+        run: |
+          set -euo pipefail
+          P="BRTibia OTC"
+          mkdir -p "$P"
+          cp -r data modules mods "$P"/
+          cp init.lua otclientrc.lua config.ini cacert.pem "$P"/
+          find exes -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dll' \) -exec cp {} "$P"/ \;
+          ls -la "$P"
+          test -f "$P/BRTibia-DirectX.exe"
+          test -f "$P/BRTibia-OpenGL.exe"
+
+      - name: Enviar pacote
+        uses: actions/upload-artifact@v4
+        with:
+          name: BRTibia-Cliente
+          path: BRTibia OTC/
+          retention-days: 90
