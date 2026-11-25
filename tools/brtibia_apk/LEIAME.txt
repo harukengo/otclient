@@ -1,0 +1,10 @@
+Montagem do APK BRTibia (o spr/dat nao fica no repositorio).
+
+1) Compilar: git push origin brtibia:brtibia-android (com um commit sem [skip ci]);
+   baixar o artifact "otclient-android-release-..." (app-release.apk).
+2) Montar o data.zip final: o assets/data.zip do APK + data/things/860/Tibia.dat e Tibia.spr.
+3) python3 apk_tools.py alinhar app-release.apk t1.apk --sem-assinatura assets/data.zip=data_final.zip
+4) jarsigner -keystore brtibia-android.p12 -storetype PKCS12 -sigalg SHA256withRSA -digestalg SHA-256 -signedjar t2.apk t1.apk brtibia
+5) python3 apk_tools.py alinhar t2.apk t3.apk
+6) python3 apk_tools.py assinar_v2 t3.apk BRTibia.apk brtibia-android.p12 arquivo_com_a_senha.txt
+(A chave e a senha NUNCA entram no repositorio.)
