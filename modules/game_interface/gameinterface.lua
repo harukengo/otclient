@@ -1843,6 +1843,7 @@ function setupViewMode(mode)
         gameRightExtraPanel:setMarginTop(0)
         gameLeftExtraPanel:setMarginTop(0)
         gameBottomPanel:setImageColor('white')
+        bottomSplitter:setVisible(true)
     end
 
     if mode == 0 then
@@ -1862,6 +1863,9 @@ function setupViewMode(mode)
             height = 11
         })
     elseif mode == 2 then
+        -- BRTibia: no modo tela cheia (o do celular) o mapa ocupa a tela toda e o divisor
+        -- entre mapa e chat ficava como uma linha atravessando o mapa.
+        bottomSplitter:setVisible(false)
         local limit = limitedZoom
         gameMapPanel:setLimitVisibleRange(limit)
         gameMapPanel:setZoom(11)
