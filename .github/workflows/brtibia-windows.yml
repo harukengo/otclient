@@ -49,8 +49,8 @@ jobs:
           cp init.lua otclientrc.lua config.ini cacert.pem "$P"/
           find exes -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dll' \) -exec cp {} "$P"/ \;
           ls -la "$P"
-          test -f "$P/BRTibia-DirectX.exe"
-          test -f "$P/BRTibia-OpenGL.exe"
+          test -f "$P/BRTibia_DirectX.exe"
+          test -f "$P/BRTibia_OpenGL.exe"
 
       - name: Enviar pacote
         uses: actions/upload-artifact@v4

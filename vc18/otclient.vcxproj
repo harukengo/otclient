@@ -129,11 +129,11 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='OpenGL|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);../src;</IncludePath>
-    <TargetName>BRTibia-OpenGL</TargetName>
+    <TargetName>BRTibia_OpenGL</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='DirectX|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);../src;</IncludePath>
-    <TargetName>BRTibia-DirectX</TargetName>
+    <TargetName>BRTibia_DirectX</TargetName>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='OpenGL|Win32'">
     <VcpkgHostTriplet>x64-windows</VcpkgHostTriplet>
