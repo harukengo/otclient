@@ -1,0 +1,12 @@
+Gera data/minimap/brtibia.otmm (minimapa completo) a partir do mapa do servidor.
+Refazer sempre que o MapOut.otbm mudar.
+
+1) dump_dat.lua: coloque como mod no cliente (mods/zz_dump/ com um .otmod
+   "@onLoad: init()"), abra o cliente uma vez; ele grava dump_itens.txt e fecha.
+   Remova o mod depois.
+2) python3 tabela.py Tibia.dat items.otb dump_itens.txt tabela.txt
+   (items.otb = o do servidor, data/items/items.otb)
+3) gcc -O2 -o otbm2tiles otbm2tiles.c -lm
+   ./otbm2tiles MapOut.otbm tabela.txt tiles.bin
+4) python3 gerar_otmm.py tiles.bin brtibia.otmm   (precisa de numpy)
+5) Copie brtibia.otmm para data/minimap/ do cliente.

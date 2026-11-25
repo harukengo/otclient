@@ -2,6 +2,7 @@ local iconTopMenu = nil
 -- @ Minimap
 local minimapWidget = nil -- bot fix
 local otmm = true
+local BRTIBIA_MINIMAP = '/data/minimap/brtibia.otmm'
 local oldPos = nil
 local fullscreenWidget
 local virtualFloor = 7
@@ -135,6 +136,13 @@ function mapController:onGameStart()
 
     if g_resources.fileExists(minimapFile) then
         loadFnc(minimapFile)
+    end
+
+    -- BRTibia: mapa completo do servidor (gerado do MapOut.otbm). Carregado por cima do
+    -- minimapa do jogador, para quem ja jogava tambem receber o mapa inteiro. As marcacoes
+    -- (bandeiras) ficam em outro arquivo e nao sao afetadas.
+    if otmm and g_resources.fileExists(BRTIBIA_MINIMAP) then
+        g_minimap.loadOtmm(BRTIBIA_MINIMAP)
     end
 
     local minimap = currentMinimap()
