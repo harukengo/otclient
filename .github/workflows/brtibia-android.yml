@@ -1,8 +1,12 @@
 name: BRTibia - Android
 
-# Compila o APK Android do branch brtibia so quando pedido (Actions > BRTibia - Android > Run workflow).
+# Compila o APK Android do codigo do branch brtibia quando ele e enviado para o branch
+# "brtibia-android" (git push origin brtibia:brtibia-android).
 # O APK sai sem Tibia.spr/Tibia.dat (nao ficam no repositorio); eles sao colocados na remontagem.
 on:
+  push:
+    branches:
+      - brtibia-android
   workflow_dispatch:
 
 permissions:
