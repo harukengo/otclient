@@ -23,7 +23,12 @@ bottomSplitter = nil
 -- by consumers (e.g. game_bot) to pause automation while the player walks;
 -- defined here so it is always present whenever this module is loaded
 lastManualWalk = 0
-limitedZoom = false
+-- BRTibia: o servidor 8.60 so envia o mapa ate ~8 quadrados para cada lado do personagem.
+-- Sem limite, a tela de jogo podia mostrar mais colunas que isso (janela larga ou zoom para
+-- tras), e as bordas ficavam sem dados: faixas de cor solida e tiles "velhos" ao andar.
+-- Limitado, a area visivel nunca passa do que o servidor envia (vale tambem para GMs, que
+-- no 8.60 recebem a mesma area).
+limitedZoom = true
 currentViewMode = 0
 leftIncreaseSidePanels = nil
 leftDecreaseSidePanels = nil
@@ -347,7 +352,7 @@ function show()
     end
 
     addEvent(function()
-        if not limitedZoom or g_game.isGM() then
+        if not limitedZoom then
             gameMapPanel:setMaxZoomOut(513)
             gameMapPanel:setLimitVisibleRange(false)
         else
@@ -1857,7 +1862,7 @@ function setupViewMode(mode)
             height = 11
         })
     elseif mode == 2 then
-        local limit = limitedZoom and not g_game.isGM()
+        local limit = limitedZoom
         gameMapPanel:setLimitVisibleRange(limit)
         gameMapPanel:setZoom(11)
         gameMapPanel:setVisibleDimension({

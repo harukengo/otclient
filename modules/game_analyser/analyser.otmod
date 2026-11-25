@@ -4,7 +4,10 @@ Module
   author: libergod, matheussf, Mehah and others.
   sandboxed: true
   scripts: [ analyser, classes/Controller, classes/HuntingAnalyser, classes/LootAnalyser, classes/SupplyAnalyser, classes/ImpactAnalyser, classes/InputAnalyser, classes/XPAanalyser, classes/DropTrackerAnalyser, classes/PartyHuntAnalyser, classes/BossCooldown ]
-  autoload: true
+  // BRTibia: desligado. No 8.60 o servidor nao envia os dados que ele usa (loot, supply,
+  // dano, kills); so a experiencia funcionava, e o botao ficava duplicado com o do vBot
+  // (vBot Analyzers, que funciona no 8.60). Tambem evita carregar o game_cyclopedia.
+  autoload: false
   dependencies: [ game_interface, game_cyclopedia ]
   @onLoad: init()
   @onUnload: terminate()
