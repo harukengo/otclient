@@ -1,0 +1,23 @@
+# BRTibia: compila so os executaveis Windows (CMake Release, Debug, OpenGL e DirectX)
+# a cada envio no branch brtibia, ou manualmente pela aba Actions.
+name: BRTibia - Windows
+
+on:
+  push:
+    branches:
+      - brtibia
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: brtibia-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build - Windows
+    uses: ./.github/workflows/reusable-build-windows.yml
+    secrets: inherit
