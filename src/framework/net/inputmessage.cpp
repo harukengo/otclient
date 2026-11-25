@@ -43,7 +43,8 @@ void InputMessage::setBuffer(const std::string& buffer)
 {
     const int len = buffer.size();
     reset();
-    checkWrite(len);
+    // a escrita comeca depois do cabecalho (m_readPos), nao no inicio do buffer
+    checkWrite(m_readPos + len);
     memcpy(m_buffer + m_readPos, buffer.data(), len);
     m_readPos += len;
     m_messageSize += len;

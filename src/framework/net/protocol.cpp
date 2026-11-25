@@ -212,6 +212,8 @@ void Protocol::internalRecvHeader(const uint8_t* buffer, const uint16_t size)
     constexpr uint32_t MAX_PACKET = std::numeric_limits<uint16_t>::max();
     if (remainingSize == 0 || remainingSize > MAX_PACKET) {
         g_logger.error(fmt::format("invalid packet size = {}", remainingSize));
+        // sem pedir nova leitura a conexao ficaria parada em silencio: encerra avisando a interface
+        onError(std::make_error_code(std::errc::bad_message));
         return;
     }
 
@@ -245,12 +247,14 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
         }
 
         g_logger.traceError(fmt::format("got a network message with invalid checksum, header: {}, size: {}", headerHex, static_cast<int>(m_inputMessage->getMessageSize())));
+        onError(std::make_error_code(std::errc::bad_message));
         return;
     }
 
     if (m_xteaEncryptionEnabled) {
         if (!xteaDecrypt(m_inputMessage)) {
             g_logger.traceError("failed to decrypt message");
+            onError(std::make_error_code(std::errc::bad_message));
             return;
         }
     }
@@ -278,7 +282,9 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
                 m_compressionMode = COMPRESSION_MODE_STREAM;
                 totalSize = 0;
             } else {
-                g_logger.traceError("failed to decompress message - {}", m_zstream.msg);
+                // m_zstream.msg pode ser nulo; fmt lanca excecao com ponteiro nulo
+                g_logger.traceError("failed to decompress message - {}", m_zstream.msg ? m_zstream.msg : "unknown error");
+                onError(std::make_error_code(std::errc::bad_message));
                 return;
             }
 
@@ -295,14 +301,16 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
 
             const int32_t ret = inflate(&m_zstream, Z_SYNC_FLUSH);
             if (ret != Z_OK && ret != Z_STREAM_END) {
-                g_logger.traceError("failed to decompress message - {}", m_zstream.msg);
+                g_logger.traceError("failed to decompress message - {}", m_zstream.msg ? m_zstream.msg : "unknown error");
+                onError(std::make_error_code(std::errc::bad_message));
                 return;
             }
             totalSize = m_zstream.total_out;
         }
 
         if (totalSize == 0) {
-            g_logger.traceError("invalid size of decompressed message - %i", totalSize);
+            g_logger.traceError("invalid size of decompressed message - {}", totalSize);
+            onError(std::make_error_code(std::errc::bad_message));
             return;
         }
 

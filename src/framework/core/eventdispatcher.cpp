@@ -38,10 +38,18 @@ void EventDispatcher::init() {
 
 void EventDispatcher::shutdown()
 {
+    // BRTibia: limite de seguranca. Um evento que se reagenda com addEvent a cada execucao
+    // (ex.: o passo do personagem seguido pela camera; o relogio nao avanca durante o
+    // encerramento, entao o passo nunca termina) prendia este laco para sempre e o processo
+    // continuava rodando depois de fechar a janela.
+    constexpr int MAX_SHUTDOWN_ROUNDS = 1000;
+    int rounds = 0;
     do {
         executeEvents();
         mergeEvents();
-    } while (!m_eventList.empty());
+    } while (!m_eventList.empty() && ++rounds < MAX_SHUTDOWN_ROUNDS);
+
+    m_eventList.clear();
 
     m_scheduledEventList.clear();
     m_deferEventList.clear();
