@@ -179,7 +179,7 @@ UIWidget
       margin-left: 5  
       size: 34 34  
       icon-source: /game_cyclopedia/images/button_wheel  
-      @onClick: modules.game_wheel.toggle()
+      @onClick: if modules.game_wheel then modules.game_wheel.toggle() end
     BorderBox
       id: DetailsBase
       anchors.top: inventoryPanel.bottom

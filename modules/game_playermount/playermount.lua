@@ -18,7 +18,8 @@ end
 
 function online()
     if g_game.getFeature(GamePlayerMounts) then
-        Keybind.new("Movement", "Mount/dismount", "Ctrl+R", "")
+        -- BR Tibia: Ctrl+M (o Ctrl+R padrao e o mesmo de "Open Rule Violation")
+        Keybind.new("Movement", "Mount/dismount", "Ctrl+M", "")
         Keybind.bind("Movement", "Mount/dismount", {
             {
               type = KEY_DOWN,

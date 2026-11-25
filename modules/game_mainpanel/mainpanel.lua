@@ -67,7 +67,15 @@ function reloadMainPanelSizes()
                         if store_count > 0 then
                             store_height = store_count * PANEL_CONSTANTS.MULTI_STORE_HEIGHT + (store_count - 1) * 2
                         end
-                        local combined_height = store_height + math.max(options_height, specials_height)
+                        -- BR Tibia: sem o botao da loja os botoes especiais (opcoes/sair) subiam e ficavam
+                        -- por cima do botao de redimensionar; desce uma linha (20 + 2 de espaco),
+                        -- alinhando com a 2a linha de icones da esquerda
+                        local specials_offset = 0
+                        if store_count == 0 then
+                            specials_offset = 22
+                        end
+                        specials_panel:setMarginTop(specials_offset)
+                        local combined_height = store_height + math.max(options_height, specials_height + specials_offset)
                         local extra_height = PANEL_CONSTANTS.HEIGHT_EXTRA_ONPANEL
                         if store_count >= 2 then
                             extra_height = extra_height - (store_count - 1) * 5
@@ -171,8 +179,9 @@ optionsController = Controller:new()
 optionsController:setUI('mainoptionspanel', modules.game_interface.getMainRightPanel())
 
 function optionsController:onInit()
-    createButton_large('Store shop', tr('Store shop'), '/images/options/store_large', toggleStore,
-    false, 8)
+    -- BR Tibia: sem botao Store (a loja e pelo site)
+    -- createButton_large('Store shop', tr('Store shop'), '/images/options/store_large', toggleStore,
+    -- false, 8)
 
     if not optionPanel then
         optionPanel = g_ui.loadUI('option_control_buttons', modules.client_options:getPanel())

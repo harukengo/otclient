@@ -194,27 +194,30 @@ function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, relo
       context.now = g_clock.millis()
       context.time = g_clock.millis()
 
+      -- BR Tibia: chama o callback direto no pcall (sem criar uma funcao nova a cada macro,
+      -- 100 vezes por segundo) e testa "enabled" antes do calculo de tempo
+      local now = context.now
       for i, macro in ipairs(context._macros) do
-        if macro.lastExecution + macro.timeout <= context.now and macro.enabled then
-          local status, result = pcall(function()
-            if macro.callback(macro) then
-                macro.lastExecution = context.now
-            end
-          end)
+        if macro.enabled and macro.lastExecution + macro.timeout <= now then
+          local status, result = pcall(macro.callback, macro)
           if not status then
-            context.error("Macro: " .. macro.name .. " execution error: " .. result)
+            context.error("Macro: " .. macro.name .. " execution error: " .. tostring(result))
+          elseif result then
+            macro.lastExecution = now
           end
         end
       end
 
-      while #context._scheduler > 0 and context._scheduler[1].execution <= g_clock.millis() do
-        local status, result = pcall(function()
-          context._scheduler[1].callback()
-        end)
+      -- BR Tibia: retira o evento da fila ANTES de executar. Antes ele era removido depois,
+      -- e um schedule() feito dentro do callback podia entrar na posicao 1 e ser apagado
+      -- no lugar dele (o evento novo sumia e o antigo rodava de novo)
+      local scheduler = context._scheduler
+      while scheduler[1] and scheduler[1].execution <= g_clock.millis() do
+        local event = table.remove(scheduler, 1)
+        local status, result = pcall(event.callback)
         if not status then
-          context.error("Schedule execution error: " .. result)
+          context.error("Schedule execution error: " .. tostring(result))
         end
-        table.remove(context._scheduler, 1)
       end
     end,
     callbacks = {

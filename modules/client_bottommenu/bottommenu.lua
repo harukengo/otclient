@@ -58,6 +58,7 @@ function init()
     monsterOutfit = boostedWindow:recursiveGetChildById('creature')
     bossOutfit = boostedWindow:recursiveGetChildById('boss')
 
+
 --  if not Services.status and default_info then
     if default_info then
         local scrollable = showOffWindow:recursiveGetChildById('contentsPanel')

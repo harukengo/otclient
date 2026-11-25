@@ -12,8 +12,9 @@
   spacing = "_" -- space replacement in character name
 ]]
 
-local link = "https://www.gunzodus.net/character/show/"
-local spacing = "_"
+-- BR Tibia: pagina de personagem do site (espaco vira +)
+local link = "https://brtibia.online/?subtopic=characters&name="
+local spacing = "+"
 
 -- do not edit below
 setDefaultTab("Main")
@@ -272,8 +273,7 @@ if rootWidget then
                             menu:setId("blzMenu")
                             menu:setGameMenu(true)
                             menu:addOption('Check Player', function()
-                              local name = widget:getText():gsub(" ", "_")
-                              local link = "https://www.gunzodus.net/character/show/"
+                              local name = widget:getText():gsub(" ", spacing)
                               g_platform.openUrl(link..name)
                             end, "")
                             menu:addOption('Copy Name', function()
@@ -322,8 +322,7 @@ if rootWidget then
             menu:setId("blzMenu")
             menu:setGameMenu(true)
             menu:addOption('Check Player', function()
-              local name = widget:getText():gsub(" ", "_")
-              local link = "https://www.gunzodus.net/character/show/"
+              local name = widget:getText():gsub(" ", spacing)
               g_platform.openUrl(link..name)
             end, "")
             menu:addOption('Copy Name', function()

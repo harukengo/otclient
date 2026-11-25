@@ -1940,7 +1940,7 @@ function getVesselBonus()
 				local number = getBonusValueUpgrade(k.bonusID, k.gemID, k.supreme, true)
 				local tooltip = bonus.tooltip
 				bonusName = bonusName:gsub("Aug. ", "")
-				if vocation == 5 then -- Monk
+				if WheelOfDestiny.vocationId == 5 then -- Monk
 					if bonusName == "Greater Flurry of Blows" then
 						tooltip = string.format("+%d%% Base Damage", number) -- Example adjustment
 					end

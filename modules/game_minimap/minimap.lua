@@ -5,6 +5,13 @@ local otmm = true
 local oldPos = nil
 local fullscreenWidget
 local virtualFloor = 7
+
+-- BR Tibia: com o mapa grande (tela cheia) aberto, o minimapa sai de dentro do quadro e
+-- "minimapBorder.minimap" fica nil; atalhos de zoom/andar e o salvamento ao sair davam erro
+-- (e o minimapa nao era salvo). Usa o widget onde ele estiver.
+local function currentMinimap()
+    return mapController.ui.minimapBorder.minimap or fullscreenWidget
+end
 local currentDayTime = {
     h = 12,
     m = 0
@@ -130,7 +137,10 @@ function mapController:onGameStart()
         loadFnc(minimapFile)
     end
 
-    self.ui.minimapBorder.minimap:load()
+    local minimap = currentMinimap()
+    if minimap then
+        minimap:load()
+    end
 end
 
 function mapController:onGameEnd()
@@ -141,7 +151,10 @@ function mapController:onGameEnd()
         g_map.saveOtcm('/minimap_' .. g_game.getClientVersion() .. '.otcm')
     end
 
-    self.ui.minimapBorder.minimap:save()
+    local minimap = currentMinimap()
+    if minimap and not minimap:isDestroyed() then
+        minimap:save()
+    end
 end
 
 function mapController:onTerminate()
@@ -152,11 +165,11 @@ function mapController:onTerminate()
 end
 
 function zoomIn()
-    mapController.ui.minimapBorder.minimap:zoomIn()
+    currentMinimap():zoomIn()
 end
 
 function zoomOut()
-    mapController.ui.minimapBorder.minimap:zoomOut()
+    currentMinimap():zoomOut()
 end
 
 function openCyclopediaMap()
@@ -207,7 +220,7 @@ function upLayer()
         return
     end
 
-    mapController.ui.minimapBorder.minimap:floorUp(1)
+    currentMinimap():floorUp(1)
     virtualFloor = virtualFloor - 1
     refreshVirtualFloors()
 end
@@ -217,33 +230,33 @@ function downLayer()
         return
     end
 
-    mapController.ui.minimapBorder.minimap:floorDown(1)
+    currentMinimap():floorDown(1)
     virtualFloor = virtualFloor + 1
     refreshVirtualFloors()
 end
 
 function onClickRoseButton(dir)
     if dir == 'north' then
-        mapController.ui.minimapBorder.minimap:move(0, 1)
+        currentMinimap():move(0, 1)
     elseif dir == 'north-east' then
-        mapController.ui.minimapBorder.minimap:move(-1, 1)
+        currentMinimap():move(-1, 1)
     elseif dir == 'east' then
-        mapController.ui.minimapBorder.minimap:move(-1, 0)
+        currentMinimap():move(-1, 0)
     elseif dir == 'south-east' then
-        mapController.ui.minimapBorder.minimap:move(-1, -1)
+        currentMinimap():move(-1, -1)
     elseif dir == 'south' then
-        mapController.ui.minimapBorder.minimap:move(0, -1)
+        currentMinimap():move(0, -1)
     elseif dir == 'south-west' then
-        mapController.ui.minimapBorder.minimap:move(1, -1)
+        currentMinimap():move(1, -1)
     elseif dir == 'west' then
-        mapController.ui.minimapBorder.minimap:move(1, 0)
+        currentMinimap():move(1, 0)
     elseif dir == 'north-west' then
-        mapController.ui.minimapBorder.minimap:move(1, 1)
+        currentMinimap():move(1, 1)
     end
 end
 
 function resetMap()
-    mapController.ui.minimapBorder.minimap:reset()
+    currentMinimap():reset()
     local player = g_game.getLocalPlayer()
     if player then
         virtualFloor = player:getPosition().z
@@ -252,7 +265,7 @@ function resetMap()
 end
 
 function getMiniMapUi()
-    return mapController.ui.minimapBorder.minimap
+    return currentMinimap()
 end
 
 function extendedView(extendedView)

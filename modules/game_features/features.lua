@@ -59,6 +59,9 @@ controller:registerEvents(g_game, {
 
         if version >= 860 then
             g_game.enableFeature(GameAttackSeq)
+            -- BR Tibia: o servidor (OTX) manda a montaria (u16) em todo outfit para clientes OTClient,
+            -- inclusive no 8.60; sem isto a leitura do mapa (0x64) sai de sincronia ("invalid thing id")
+            g_game.enableFeature(GamePlayerMounts)
         end
 
         if version >= 862 then

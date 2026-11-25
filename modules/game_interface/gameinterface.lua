@@ -141,6 +141,9 @@ function init()
     connect(g_app, {
         onExit = save
     })
+    connect(g_app, {
+        onTerminate = releaseCameraOnTerminate
+    })
 
     gameRootPanel = g_ui.displayUI('gameinterface')
     gameRootPanel:hide()
@@ -283,6 +286,9 @@ function terminate()
     disconnect(g_app, {
         onExit = save,
     })
+    disconnect(g_app, {
+        onTerminate = releaseCameraOnTerminate
+    })
 
     hookedMenuOptions = {}
 
@@ -398,6 +404,20 @@ function forceExit()
     g_game.cancelLogin()
     scheduleEvent(exit, 10)
     return true
+end
+
+-- BR Tibia: se o cliente era fechado com o personagem andando, o processo nao terminava
+-- (ficava em segundo plano usando CPU). Ao encerrar, o relogio do jogo para; a camera
+-- seguindo o personagem reagendava o passo sem fim e o encerramento nunca acabava.
+-- Soltando a camera antes, o passo passa a ser agendado por tempo e o encerramento conclui.
+function releaseCameraOnTerminate()
+    if not gameMapPanel then
+        return
+    end
+    local player = g_game.getLocalPlayer()
+    if player and player:getPosition() then
+        gameMapPanel:setCameraPosition(player:getPosition())
+    end
 end
 
 function tryExit()

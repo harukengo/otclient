@@ -22,6 +22,9 @@ local PREY_ACTION_MONSTERSELECTION = 2
 local PREY_ACTION_REQUEST_ALL_MONSTERS = 3
 local PREY_ACTION_CHANGE_FROM_ALL = 4
 local PREY_ACTION_OPTION = 5
+
+-- declarada aqui porque e usada antes do ponto onde e definida (botao de reroll da lista)
+local showListRerollConfirmation
 local PREY_OPTION_UNTOGGLE = 0
 local PREY_OPTION_TOGGLE_AUTOREROLL = 1
 local PREY_OPTION_TOGGLE_LOCK_PREY = 2
@@ -932,7 +935,7 @@ function refreshRerollButtonState(slot)
     updatePanel(prey.inactive)
 end
 
-local function showListRerollConfirmation(slot)
+function showListRerollConfirmation(slot)
     local price = getDisplayedRerollPrice(slot)
 
     if price == nil then

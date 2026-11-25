@@ -111,6 +111,9 @@ function toggle()
 	else
 		g_stats.resume()
 		debugInfoWindow:show()
+		if not updateEvent then
+			updateEvent = scheduleEvent(update, 20)
+		end
 		debugInfoWindow:raise()
 		debugInfoWindow:focus()
 		debugInfoButton:setOn(true)
@@ -130,11 +133,13 @@ function monitor()
 end
 
 function update()
-	updateEvent = scheduleEvent(update, 20)
-
+	-- BR Tibia: com a janela fechada nao reagenda (antes rodava 50x por segundo sem fazer nada);
+	-- volta a rodar quando a janela e aberta em toggle()
 	if not debugInfoWindow:isVisible() then
+		updateEvent = nil
 		return
 	end
+	updateEvent = scheduleEvent(update, 20)
 
 	iter = (iter + 1) % 8 -- some functions are slow (~5ms), it will avoid lags
 	if iter == 0 then

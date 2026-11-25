@@ -146,13 +146,13 @@ end
 
 local function updateLabelText()
     if enterGame:getChildById('clientComboBox') and tonumber(enterGame:getChildById('clientComboBox'):getText()) > 1080 then
-        enterGame:setText("Journey Onwards")
-        enterGame:getChildById('emailLabel'):setText("Email:")
-        enterGame:getChildById('rememberEmailBox'):setText("Remember Email:")
+        enterGame:setText(tr("Journey Onwards"))
+        enterGame:getChildById('emailLabel'):setText(tr("Email:"))
+        enterGame:getChildById('rememberEmailBox'):setText(tr("Remember Email:"))
     else
-        enterGame:setText("Enter Game")
-        enterGame:getChildById('emailLabel'):setText("Acc Name:")
-        enterGame:getChildById('rememberEmailBox'):setText("Remember password:")
+        enterGame:setText(tr("Enter Game"))
+        enterGame:getChildById('emailLabel'):setText(tr("Acc Name:"))
+        enterGame:getChildById('rememberEmailBox'):setText(tr("Remember password:"))
     end
 end
 
@@ -345,9 +345,9 @@ function EnterGame.firstShow()
     if Services and Services.status then
         if g_modules.getModule("client_bottommenu"):isLoaded()  then
             EnterGame.postCacheInfo()
-            EnterGame.postEventScheduler()
+            -- EnterGame.postEventScheduler() -- BR Tibia: calendario desligado (o login.php nao responde esse pedido)
             -- EnterGame.postShowOff() -- myacc/znote no send login.php
-            EnterGame.postShowCreatureBoost()
+            -- EnterGame.postShowCreatureBoost() -- BR Tibia: sem boosted creature/boss no 8.60
         end
     end
 end

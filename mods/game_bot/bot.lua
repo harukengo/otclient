@@ -530,9 +530,7 @@ function check()
 
   checkEvent = scheduleEvent(check, 10)
 
-  local status, result = pcall(function()
-    return botExecutor.script()
-  end)
+  local status, result = pcall(botExecutor.script)
   if not status then
     botExecutor = nil -- critical
     return onError(result)

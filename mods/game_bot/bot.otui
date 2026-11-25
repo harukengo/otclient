@@ -15,7 +15,7 @@ BotTabBarButton < UIButton
   padding: 4
   padding-right: 5
   text-horizontal-auto-resize: true
-  size: 45 18
+  size: 54 18
   image-source: /images/ui/tabbutton_square
   image-color: #aaaaaa
   image-clip: 0 0 98 18
@@ -106,13 +106,14 @@ MiniWindow
       margin-left: 3
       margin-right: 2
 
+      // BR Tibia: cores mais fortes para ler o On/Off no fundo escuro
       $on:
         text: On
-        color: #00AA00
+        color: #3FD23F
 
       $!on:
         text: Off
-        color: #FF0000
+        color: #FF5555
 
     Label
       id: statusLabel
@@ -163,11 +164,12 @@ MiniWindow
       anchors.top: prev.bottom
       anchors.left: parent.left
       anchors.right: parent.right
-      margin-right: -20
+      margin-right: 2
 
+      // BR Tibia: abas mais largas e sem invadir a barra de rolagem ("Target" saia cortado)
       layout:
         type: grid
-        cell-size: 45 18
+        cell-size: 54 18
         flow: true
         fit-children: true
     Panel

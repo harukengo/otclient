@@ -434,7 +434,10 @@ return {
         end
     },
     asyncTxtLoading                   = {
-        value = false,
+        -- BR Tibia: ligado por padrao. O Tibia.spr do BRTibia tem 440 MB; desligado, o arquivo
+        -- inteiro fica na memoria (~1,1 GB de uso). Ligado, as sprites sao lidas do disco em
+        -- segundo plano: ~420 MB a menos de RAM, sem travadas medidas ao andar.
+        value = true,
         action = function(value, options, controller, panels, extraWidgets)
             if g_game.isUsingProtobuf() then
                 value = true

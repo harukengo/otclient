@@ -194,12 +194,23 @@ end
 
 -- schedule(timeout, callback)
 context.schedule = function(timeout, callback)
-  local extecute_time = g_clock.millis() + timeout
-  table.insert(context._scheduler, {
-    execution = extecute_time,
+  local execute_time = g_clock.millis() + timeout
+  -- BR Tibia: insere ja na posicao certa (busca binaria) em vez de reordenar a fila inteira
+  -- a cada schedule; eventos com o mesmo horario mantem a ordem em que foram agendados
+  local scheduler = context._scheduler
+  local low, high = 1, #scheduler
+  while low <= high do
+    local mid = math.floor((low + high) / 2)
+    if scheduler[mid].execution <= execute_time then
+      low = mid + 1
+    else
+      high = mid - 1
+    end
+  end
+  table.insert(scheduler, low, {
+    execution = execute_time,
     callback = callback
   })
-  table.sort(context._scheduler, function(a, b) return a.execution < b.execution end)
 end
 
 -- delay(duration) -- block execution of current macro/hotkey/callback for x milliseconds

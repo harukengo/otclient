@@ -34,7 +34,8 @@ ShowOffWidget < UIWidget
 
 Panel
   id: bottomMenu
-  size: 1020 116
+  // BR Tibia: sem o quadro Boosted (era 1020 = dicas 605 + eventos 246 + boosted 169)
+  size: 850 116
   anchors.bottom: parent.bottom
   anchors.horizontalCenter: parent.horizontalCenter
   image-source: /images/ui/panel_top
@@ -47,7 +48,7 @@ Panel
     text-auto-resize: true
     color: #c0c0c0ff
     margin-bottom: 110
-    text: OTClient Redemption
+    text: BRTibia
     ttf-font: martel
     ttf-font-size: 90
     stroke: 2 black
@@ -143,6 +144,8 @@ Panel
     margin-left: 1
     size: 169 116
     draggable: false
+    // BR Tibia: boosted creature/boss nao existem no servidor 8.60
+    visible: false
 
     Label
       !text: tr('Boosted')

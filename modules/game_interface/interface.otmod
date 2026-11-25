@@ -5,6 +5,13 @@ Module
   website: https://github.com/edubart/otclient
   sandboxed: true
   scripts: [ widgets/uigamemap, widgets/uiitem, widgets/statsbar, gameinterface ]
+  // BR Tibia: modulos so do protocolo novo (12.x+) foram tirados da carga para abrir mais
+  // rapido e gastar menos memoria no 8.60: game_prey, game_imbuing, game_imbuementtracker,
+  // game_market, game_unjustifiedpoints, game_stash, game_highscore, game_quickloot,
+  // game_rewardwall, game_forge, game_tutorial, game_inspect, game_taskboard, game_wheel,
+  // game_blessing e game_cyclopedia (estes dois ja se descarregavam sozinhos ao entrar no jogo no 8.60).
+  // Tambem fora: game_compendium (so 11.x+) e game_soundDebug (ferramenta de depuracao de som).
+  // Para religar algum, basta recolocar o nome na lista abaixo.
   load-later:
     - game_walk
     - game_joystick
@@ -13,9 +20,6 @@ Module
     - game_healthinfo
     - game_inventory
     - game_mainpanel
-    - game_prey
-    - game_imbuing
-    - game_imbuementtracker
     - game_hotkeys
     - game_questlog
     - game_textmessage
@@ -33,32 +37,17 @@ Module
     - game_playerdeath
     - game_playermount
     - game_ruleviolation
-    - game_market
     - game_spelllist
     - game_cooldown
     - game_modaldialog
-    - game_unjustifiedpoints
     - game_shaders
     - game_attachedeffects
     - game_paperdolls
-    - game_stash
     - game_healthcircle
-    - game_soundDebug
     - game_shop
     - game_notifications
-    - game_highscore
-    - game_blessing
     - game_store
-    - game_quickloot
-    - game_cyclopedia
     - game_creatureinformation
-    - game_rewardwall
-    - game_compendium
-    - game_forge
-    - game_tutorial
-    - game_inspect
-    - game_taskboard
-    - game_wheel
     - game_proficiency
 
   @onLoad: init()

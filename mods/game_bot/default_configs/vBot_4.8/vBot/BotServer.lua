@@ -61,8 +61,8 @@ if rootWidget then
       end
 	  BotServer.resetReconnect()
       botServerWindow.Data.ServerStatus:setText("DISCONNECTED")
-      ui.botServer:setColor('#E3242B')
-      botServerWindow.Data.ServerStatus:setColor('#E3242B')
+      ui.botServer:setColor('#FF6B6B')
+      botServerWindow.Data.ServerStatus:setColor('#FF6B6B')
       botServerWindow.Data.Participants:setText("-")
       botServerWindow.Data.Members:setTooltip('')
       ServerMembers = {}
@@ -187,8 +187,8 @@ function updateStatusText()
     end
   else
     botServerWindow.Data.ServerStatus:setText("DISCONNECTED")
-    ui.botServer:setColor('#E3242B')
-    botServerWindow.Data.ServerStatus:setColor('#E3242B')
+    ui.botServer:setColor('#FF6B6B')
+    botServerWindow.Data.ServerStatus:setColor('#FF6B6B')
     botServerWindow.Data.Participants:setText("-")
   end
 end

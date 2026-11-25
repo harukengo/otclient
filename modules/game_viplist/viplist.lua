@@ -625,18 +625,26 @@ function onAddVip(id, name, state, description, iconId, notify, groupID, bool)
 end
 
 function onVipStateChange(id, state, groupID)
+    -- name/notify ficam fora do if: sao usados no aviso de login/logout abaixo
+    local name, description, iconId, notify
     if g_game.getFeature(GameVipGroups) and globalSettings.showGrouped then
-        local name, description, iconId, notify = searchPlayerbyId(id)
+        name, description, iconId, notify = searchPlayerbyId(id)
+        if not name then
+            return
+        end
         onAddVip(id, name, state, description, iconId, notify, groupID, true)
     else
         local vipList = vipWindow:getChildById('contentsPanel')
         local label = vipList:getChildById('vip' .. id)
-        local name = label:getText()
-        local description = label:getTooltip()
-        local iconId = label.iconId
-        local notify = label.notifyLogin
+        if not label then
+            return
+        end
+        name = label:getText()
+        description = label:getTooltip()
+        iconId = label.iconId
+        notify = label.notifyLogin
         label:destroy()
-    
+
         onAddVip(id, name, state, description, iconId, notify)
     end
 

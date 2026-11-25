@@ -4,12 +4,14 @@
 -- updater
 Services = {
     --updater = "http://localhost/api/updater.php", --./updater
-    --status = "http://localhost/login.php", --./client_entergame | ./client_topmenu
+    status = "https://brtibia.online/login.php", --./client_entergame | ./client_topmenu (players online)
     --websites = "http://localhost/?subtopic=accountmanagement", --./client_entergame "Forgot password and/or email"
     --createAccount = "http://localhost/clientcreateaccount.php", --./client_entergame -- createAccount.lua
     --getCoinsUrl = "http://localhost/?subtopic=shop&step=terms", --./game_market
+    -- BR Tibia: desligado. O BRTibia usa Tibia.dat/Tibia.spr proprios (data/things/860/);
+    -- ligado, se esses arquivos faltarem o cliente baixaria os genericos do GitHub.
     clientAssets = {
-        enabled = true,
+        enabled = false,
         repository = "dudantas/tibia-client",
         installSounds = true,
         strictManifestSha256 = true,
@@ -52,52 +54,22 @@ local ENABLE_SERVERS = true
 -- without deleting or commenting out individual entries.
 --
 
+
 Servers_init = {}
 
 if ENABLE_SERVERS then
-
-    ---
-    -- List of servers and their configuration parameters.
-    -- Each entry defines port, protocol, and authentication options.
-    -- @table Servers_init
-    --
     Servers_init = {
-
-        -- Local login server
-        ---
-        -- Configuration for local login server.
-        -- @class table
-        -- @name local_login
-        -- @field port Port used for HTTP connection
-        -- @field protocol Protocol identifier used by the application
-        -- @field httpLogin Enables HTTP-based login on the server
-        -- @field useAuthenticator Enables additional authentication layer
-        --
-        ["http://127.0.0.1/login.php"] = {
-            port = 80,
-            protocol = 1525,
-            httpLogin = true,
-            useAuthenticator = false
-        },
-
-        -- External server
-        ---
-        -- Configuration for external server ip.net.
-        -- @class table
-        -- @name ip_net
-        -- @field port TCP port used for connection
-        -- @field protocol Protocol identifier used by the server
-        -- @field httpLogin Indicates if the server allows HTTP login
-        --
-        ["ip.net"] = {
+        -- BRTibia - OTX 2.x / Tibia 8.60
+        ["brtibia.servegame.com"] = {
             port = 7171,
             protocol = 860,
-            httpLogin = false
+            httpLogin = false,
+            useAuthenticator = false
         }
     }
 end
 
-g_app.setName("OTClient - Redemption");
+g_app.setName("OTClient - BRTibia");
 g_app.setCompactName("otclient");
 g_app.setOrganizationName("otcr");
 

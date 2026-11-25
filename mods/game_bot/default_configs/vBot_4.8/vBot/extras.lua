@@ -389,7 +389,7 @@ if true then
   end)
 end
 
-addCheckBox("bless", "Buy bless at login", true, rightPanel, "Say !bless at login.")
+addCheckBox("bless", "Buy bless at login", false, rightPanel, "Say !bless at login.") -- BR Tibia: desligado por padrao (no 8.60 o cliente nao sabe se ja tem bless e repetia !bless a cada login)
 if true then
   local blessed = false
   onTextMessage(function(mode, text)

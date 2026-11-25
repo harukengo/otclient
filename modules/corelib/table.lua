@@ -125,7 +125,7 @@ function table.removevalue(t, value)
     return false
 end
 
-function table.popvalue(value)
+function table.popvalue(t, value)
     local index = nil
     for k, v in pairs(t) do
         if v == value or not value then
