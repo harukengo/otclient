@@ -1,3 +1,4 @@
+local BRTIBIA_SEM_PAINEL = true
 local bottomMenu
 local calendarWindow
 local activeScheduleEvent
@@ -38,6 +39,11 @@ local default_info = {
 function init()
     g_ui.importStyle('calendar')
     bottomMenu = g_ui.displayUI('bottommenu')
+    -- BRTibia: tela principal sem o painel de baixo (dicas, Event Schedule e Boosted),
+    -- deixando o fundo e o logo livres. Para voltar, mude BRTIBIA_SEM_PAINEL para false.
+    if BRTIBIA_SEM_PAINEL then
+        bottomMenu:hide()
+    end
 
     calendarWindow = g_ui.createWidget('CalendarGrid', rootWidget)
     calendarCurrentMonth = calendarWindow:recursiveGetChildById('calendarCurrentMonth')
@@ -104,6 +110,9 @@ function hide()
 end
 
 function show()
+    if BRTIBIA_SEM_PAINEL then
+        return
+    end
     bottomMenu:show()
     bottomMenu:raise()
     bottomMenu:focus()

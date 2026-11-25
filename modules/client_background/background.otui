@@ -2,7 +2,8 @@ Panel
   id: background
   image-source: /images/background
   image-smooth: false
-  image-fixed-ratio: true
+  // BRTibia: recorte calculado em background.lua (ancorado embaixo a direita, onde fica o logo)
+  image-fixed-ratio: false
   anchors.top: parent.top
   anchors.left: parent.left
   anchors.right: parent.right
@@ -13,7 +14,8 @@ Panel
   UILabel
     id: clientVersionLabel
     background-color: #00000099
-    anchors.right: parent.right
+    // BRTibia: no canto esquerdo para nao cobrir o logo do fundo
+    anchors.left: parent.left
     anchors.bottom: parent.bottom
     text-align: center
     text-auto-resize: true

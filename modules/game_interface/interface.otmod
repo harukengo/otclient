@@ -11,6 +11,7 @@ Module
   // game_rewardwall, game_forge, game_tutorial, game_inspect, game_taskboard, game_wheel,
   // game_blessing e game_cyclopedia (estes dois ja se descarregavam sozinhos ao entrar no jogo no 8.60).
   // Tambem fora: game_compendium (so 11.x+) e game_soundDebug (ferramenta de depuracao de som).
+  // E ainda: game_store e game_shop (loja; o botao Store foi tirado) e game_proficiency (14.x+).
   // Para religar algum, basta recolocar o nome na lista abaixo.
   load-later:
     - game_walk
@@ -44,11 +45,8 @@ Module
     - game_attachedeffects
     - game_paperdolls
     - game_healthcircle
-    - game_shop
     - game_notifications
-    - game_store
     - game_creatureinformation
-    - game_proficiency
 
   @onLoad: init()
   @onUnload: terminate()

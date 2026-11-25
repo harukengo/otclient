@@ -5,10 +5,29 @@ local bgEffectEvent = nil
 local toggleState = true  -- controls which effect  is active
 local timeLoopBackgroundEffect = 5000 -- 5 seconds
 
+-- BRTibia: o fundo tem o logo no canto inferior direito. Em vez de cortar as bordas por igual,
+-- o recorte fica preso embaixo a direita: em telas mais estreitas ou mais altas que 16:9,
+-- some um pedaco da esquerda/de cima e o logo continua inteiro.
+function ajustarFundo()
+    if not background then
+        return
+    end
+    local w, h = background:getWidth(), background:getHeight()
+    local tw, th = background:getImageTextureWidth(), background:getImageTextureHeight()
+    if w <= 0 or h <= 0 or tw <= 0 or th <= 0 then
+        return
+    end
+    local escala = math.max(w / tw, h / th)
+    local cw, ch = math.floor(w / escala), math.floor(h / escala)
+    background:setImageClip({ x = tw - cw, y = th - ch, width = cw, height = ch })
+end
+
 -- public functions
 function init()
     background = g_ui.displayUI('background')
     background:lower()
+    background.onGeometryChange = ajustarFundo
+    ajustarFundo()
 
     clientVersionLabel = background:getChildById('clientVersionLabel')
     clientVersionLabel:setText(g_app.getName() .. ' ' .. g_app.getVersion() .. '\n' .. 'Rev  ' ..

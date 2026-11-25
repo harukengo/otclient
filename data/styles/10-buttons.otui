@@ -10,8 +10,10 @@ Button < UIButton
   opacity: 1.0
   click-sound: 2774
 
+  // BRTibia: texto dourado ao passar o mouse
   $hover !disabled:
     image-clip: 0 0 43 20
+    color: #f5d77a
 
   $pressed:
     image-clip: 0 20 43 20

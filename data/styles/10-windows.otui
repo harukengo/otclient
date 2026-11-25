@@ -2,7 +2,8 @@ Window < UIWindow
   font: verdana-11px-antialised
   size: 200 200
   opacity: 1
-  color: #dfdfdf
+  // BRTibia: titulo das janelas em dourado
+  color: #e8c15a
   text-offset: 0 6
   text-align: top
   image-source: /images/ui/window
@@ -15,7 +16,7 @@ Window < UIWindow
   display-sound: 2785
 
   $disabled:
-    color: #dfdfdf88
+    color: #e8c15a88
 
   $dragging:
     opacity: 0.8

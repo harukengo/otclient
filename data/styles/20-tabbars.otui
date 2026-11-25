@@ -13,9 +13,10 @@ MoveableTabBarButton < UIButton
   margin-top: 2
   padding: 3
 
+  // BRTibia: aba selecionada em dourado
   $checked:
     image-clip: 0 36 96 22
-    color: #dfdfdf
+    color: #e8c15a
 
   $on !checked:
     color: #F75F5F
@@ -54,7 +55,7 @@ TabBarButton < UIButton
 
   $checked:
     image-clip: 0 36 98 18
-    color: #dfdfdf
+    color: #e8c15a
 
   $on !checked:
     color: #de6f6f

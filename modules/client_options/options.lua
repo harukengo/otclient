@@ -293,6 +293,14 @@ local function setup()
 
     setupComboBox()
 
+    -- BRTibia: migracao unica. Quem ja tinha o cliente ficou com "Async texture loading"
+    -- desligado (padrao antigo), o que mantem o Tibia.spr inteiro na memoria. Liga uma vez;
+    -- se o jogador desligar depois, a escolha dele e respeitada.
+    if g_settings.getNumber('brtibiaMigracao', 0) < 1 then
+        g_settings.set('asyncTxtLoading', true)
+        g_settings.set('brtibiaMigracao', 1)
+    end
+
     -- load options
     for k, obj in pairs(options) do
         -- an option may either be a bare value or a table with an 'action'
