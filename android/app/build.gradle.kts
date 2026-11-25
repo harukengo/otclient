@@ -16,7 +16,8 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.github.otclient"
+        // BRTibia: id proprio (o app antigo "otclient" pode continuar instalado ate o jogador remover)
+        applicationId = "com.brtibia.cliente"
         minSdk = 21
         targetSdk = 36
         versionCode = 1
