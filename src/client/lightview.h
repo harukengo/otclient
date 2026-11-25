@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,6 +25,7 @@
 #include "framework/graphics/coordsbuffer.h"
 #include "framework/luaengine/luaobject.h"
 #include "staticdata.h"
+#include <atomic>
 #include <framework/graphics/declarations.h>
 
 class LightView final : public LuaObject
@@ -84,4 +85,5 @@ private:
     TexturePtr m_texture;
     LightData m_lightData;
     std::array<std::vector<uint8_t>, 2> m_pixels;
+    std::atomic_bool m_updatePixel{ false };
 };

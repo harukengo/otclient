@@ -64,6 +64,9 @@ function init()
     manaShieldCircle:setVisible(false)
     manaShieldCircleFront:setVisible(false)
 
+    -- @ MONK
+    initMonkWidgets()
+    -- @
     whenMapResizeChange()
     initOnHpAndMpChange()
     initOnGeometryChange()
@@ -97,9 +100,15 @@ function init()
     connect(g_game, {
         onGameStart = setPlayerValues
     })
+    if StatusIconBar and StatusIconBar.init then
+        StatusIconBar.init()
+    end
 end
 
 function terminate()
+    if StatusIconBar and StatusIconBar.terminate then
+        StatusIconBar.terminate()
+    end
     healthCircle:destroy()
     healthCircle = nil
     manaCircle:destroy()
@@ -121,7 +130,9 @@ function terminate()
     expCircleFront = nil
     skillCircleFront:destroy()
     skillCircleFront = nil
-
+    -- @ Destroy MONK
+    terminateMonkWidgets()
+    -- @
     terminateOnHpAndMpChange()
     terminateOnGeometryChange()
     terminateOnLoginChange()
@@ -146,7 +157,12 @@ function initOnHpAndMpChange()
         onSkillChange = whenSkillsChange,
         onManaShieldChange = whenManaShieldChange,
         onMagicLevelChange = whenSkillsChange,
-        onLevelChange = whenSkillsChange
+        onLevelChange = whenSkillsChange,
+        -- @ MONK in modules\game_interface\widgets\statsbar.lua
+        -- onHarmonyChange = whenMonkHarmonyChange,
+        -- onSereneChange = whenMonkSereneChange,
+        -- onVocationChange = function() checkMonkVocation() end
+        -- @
     })
 end
 
@@ -157,7 +173,12 @@ function terminateOnHpAndMpChange()
         onSkillChange = whenSkillsChange,
         onManaShieldChange = whenManaShieldChange,
         onMagicLevelChange = whenSkillsChange,
-        onLevelChange = whenSkillsChange
+        onLevelChange = whenSkillsChange,
+        -- @ MONK in modules\game_interface\widgets\statsbar.lua
+        -- onHarmonyChange = whenMonkHarmonyChange,
+        -- onSereneChange = whenMonkSereneChange,
+        -- onVocationChange = function() checkMonkVocation() end
+        -- @
     })
 end
 
@@ -187,6 +208,12 @@ end
 
 function whenHealthChange()
     if g_game.isOnline() then
+        -- @ MONK
+        if isMonkMode then
+            whenMonkHealthChange()
+            return
+        end
+        -- @
         -- Fix By TheMaoci ~ if your server doesn't have this properly implemented,
         -- it will cause alot of unnecessary deaths from players which will be unfair.
         -- My friend reported me that while he was using his otcv8 and asked for a fix so here you go :)
@@ -539,9 +566,15 @@ function whenMapResizeChange()
         if isExpCircle or isSkillCircle then
             whenSkillsChange()
         end
+        -- @ MONK
+        positionMonkWidgets()
+        -- @
     end
 
     updateManaShieldDisplay()
+    if StatusIconBar and StatusIconBar.updatePosition then
+        StatusIconBar.updatePosition()
+    end
 end
 
 -------------------------------------------------
@@ -552,13 +585,25 @@ function setHealthCircle(value)
     value = toboolean(value)
     isHealthCircle = value
     if value then
-        healthCircle:setVisible(true)
-        healthCircleFront:setVisible(true)
+        -- @ MONK
+        checkMonkVocation()
+        if isMonkMode then
+            healthCircle:setVisible(false)
+            healthCircleFront:setVisible(false)
+            setMonkWidgetsVisible(true)
+        else
+            healthCircle:setVisible(true)
+            healthCircleFront:setVisible(true)
+        end
         whenMapResizeChange()
         updateManaShieldDisplay()
+        -- @
     else
         healthCircle:setVisible(false)
         healthCircleFront:setVisible(false)
+        -- @ MONK
+        setMonkWidgetsVisible(false)
+        -- @
         if manaShieldCircle and manaShieldCircleFront then
             manaShieldCircle:setVisible(false)
             manaShieldCircleFront:setVisible(false)
@@ -622,7 +667,6 @@ function setSkillType(skill)
     end
 
     local char = g_game.getCharacterName()
-    local skillType = skillTypes[char]
 
     skillTypes[char] = skill
     whenMapResizeChange()
@@ -651,7 +695,9 @@ function setCircleOpacity(value)
     expCircleFront:setOpacity(value)
     skillCircle:setOpacity(value)
     skillCircleFront:setOpacity(value)
-
+    -- @ MONK
+    setMonkCircleOpacity(value)
+    -- @
     g_settings.set('healthcircle_opacity', value)
 end
 
@@ -706,8 +752,12 @@ function addToOptionsModule()
 
     statsBarMenuLoaded = true
 
-    chooseStatsBarDimension:setCurrentOptionByData(g_settings.getString('statsbar_dimension'), true)
-    chooseStatsBarPlacement:setCurrentOptionByData(g_settings.getString('statsbar_placement'), true)
+    -- fall back to the same defaults as the stats bar itself, otherwise an
+    -- empty/unknown setting would silently select the first option ('hide')
+    local storedDimension = g_settings.getString('statsbar_dimension')
+    local storedPlacement = g_settings.getString('statsbar_placement')
+    chooseStatsBarDimension:setCurrentOptionByData(storedDimension ~= "" and storedDimension or 'compact', true)
+    chooseStatsBarPlacement:setCurrentOptionByData(storedPlacement ~= "" and storedPlacement or 'top', true)
 
     -- Set values
     healthCheckBox:setChecked(isHealthCircle)
@@ -726,10 +776,19 @@ function addToOptionsModule()
 end
 
 function updateStatsBar()
-    if statsBarMenuLoaded then
-        modules.game_interface.updateStatsBar(chooseStatsBarDimension:getCurrentOption().data,
-            chooseStatsBarPlacement:getCurrentOption().data)
+    if not statsBarMenuLoaded then
+        return
     end
+
+    local dimensionOption = chooseStatsBarDimension:getCurrentOption()
+    local placementOption = chooseStatsBarPlacement:getCurrentOption()
+    -- a selection can be empty while the stored stats bar state is still unknown,
+    -- there is nothing to apply in that case
+    if not dimensionOption or not placementOption then
+        return
+    end
+
+    modules.game_interface.updateStatsBar(dimensionOption.data, placementOption.data)
 end
 
 function setPlayerValues()
@@ -741,6 +800,9 @@ function setPlayerValues()
 end
 
 function setStatsBarOption(dimension, placement)
+    if not chooseStatsBarDimension or not chooseStatsBarPlacement then
+        return
+    end
     chooseStatsBarDimension:setCurrentOptionByData(dimension, true)
     chooseStatsBarPlacement:setCurrentOptionByData(placement, true)
 end

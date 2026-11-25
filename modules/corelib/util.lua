@@ -45,6 +45,15 @@ function connect(object, arg1, arg2, arg3)
         return
     end
 
+    -- Connecting to a class table (e.g. connect(LocalPlayer, ...)) does not go
+    -- through the object's __newindex, so the engine cannot notice on its own
+    -- that a handler showed up. Without this, a callLuaField that failed before
+    -- the connect stays cached as "this event does not exist" and is never
+    -- dispatched again.
+    if type(object) ~= 'userdata' then
+        invalidateEventCache()
+    end
+
     local signalsAndSlots
     local pushFront
     if type(arg1) == 'string' then
@@ -465,4 +474,19 @@ function pdumpWidgetId(widget, indent)
         local newIndent = (i == #children) and (indent .. "    ") or (indent .. "|   ")
         pdumpWidgetId(child, newIndent)
     end
+end
+
+function translateVocation(id)
+	if id == 1 or id == 11 then
+		return 8 -- ek
+	elseif id == 2 or id == 12 then
+		return 7 -- rp
+	elseif id == 3 or id == 13 then
+		return 5 -- ms
+	elseif id == 4 or id == 14 then
+		return 6 -- ed
+  elseif id == 5 or id == 15 then
+    return 9 -- em
+	end
+  return 0
 end

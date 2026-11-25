@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -67,6 +67,16 @@ bool luavalue_cast(const int index, double& d)
 }
 
 // string
+int push_luavalue(const char* cstr)
+{
+    if (!cstr) {
+        g_lua.pushNil();
+    } else {
+        g_lua.pushString(cstr);
+    }
+    return 1;
+}
+
 int push_luavalue(const std::string_view str)
 {
     g_lua.pushString(str);

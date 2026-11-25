@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,17 @@
 #include "framework/core/clock.h"
 #include "framework/graphics/paintershaderprogram.h"
 #include "framework/graphics/shadermanager.h"
+#include <framework/util/stats.h>
+
+Thing::Thing()
+{
+    g_stats.addThing();
+}
+
+Thing::~Thing()
+{
+    g_stats.removeThing();
+}
 
 void Thing::setPosition(const Position& position, uint8_t /*stackPos*/)
 {
@@ -498,6 +509,13 @@ bool Thing::hasElevation() const {
         return t->hasElevation();
     return false;
 }
+bool Thing::hasFloorChange() const
+{
+    if (const auto t = getThingType(); t)
+        return t->hasFloorChange();
+    return false;
+}
+
 bool Thing::hasAction() const {
     if (const auto t = getThingType(); t)
         return t->hasAction();
@@ -539,6 +557,12 @@ bool Thing::isAmmo() {
     return false;
 }
 
+bool Thing::isDualWield() {
+    if (const auto t = getThingType(); t)
+        return t->isDualWield();
+    return false;
+}
+
 PLAYER_ACTION Thing::getDefaultAction() {
     if (const auto t = getThingType(); t)
         return t->getDefaultAction();
@@ -549,6 +573,42 @@ uint16_t Thing::getClassification() {
     if (const auto t = getThingType(); t)
         return t->getClassification();
     return 0;
+}
+
+uint32_t Thing::getCyclopediaType() const {
+    if (const auto t = getThingType(); t)
+        return t->getCyclopediaType();
+    return 0;
+}
+
+uint32_t Thing::getProficiencyId() const {
+    if (const auto t = getThingType(); t)
+        return t->getProficiencyId();
+    return 0;
+}
+
+uint32_t Thing::getWeaponType() const {
+    if (const auto t = getThingType(); t)
+        return t->getWeaponType();
+    return 0;
+}
+
+uint32_t Thing::getMinimumLevel() const {
+    if (const auto t = getThingType(); t)
+        return t->getMinimumLevel();
+    return 0;
+}
+
+uint32_t Thing::getImbueSlots() const {
+    if (const auto t = getThingType(); t)
+        return t->getImbueSlots();
+    return 0;
+}
+
+std::vector<uint32_t> Thing::getRestrictVocation() const {
+    if (const auto t = getThingType(); t)
+        return t->getRestrictVocation();
+    return {};
 }
 
 bool Thing::canDraw(const Color& color) const {

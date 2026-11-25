@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,19 +33,19 @@ OTMLDocumentPtr OTMLDocument::create()
     return doc;
 }
 
-OTMLDocumentPtr OTMLDocument::parse(const std::string& fileName)
+OTMLDocumentPtr OTMLDocument::parse(const std::string& fileName, const std::unordered_map<std::string, std::string>& aliases)
 {
     std::stringstream fin;
     const auto& source = g_resources.resolvePath(fileName);
     g_resources.readFileStream(source, fin);
-    return parse(fin, source);
+    return parse(fin, source, aliases);
 }
 
-OTMLDocumentPtr OTMLDocument::parse(std::istream& in, const std::string_view source)
+OTMLDocumentPtr OTMLDocument::parse(std::istream& in, const std::string_view source, const std::unordered_map<std::string, std::string>& aliases)
 {
     const auto& doc(OTMLDocumentPtr(new OTMLDocument));
     doc->setSource(source);
-    OTMLParser parser(doc, in);
+    OTMLParser parser(doc, in, aliases);
     parser.parse();
     return doc;
 }
@@ -55,4 +55,14 @@ std::string OTMLDocument::emit() { return OTMLEmitter::emitNode(asOTMLNode()) + 
 bool OTMLDocument::save(const std::string_view fileName)
 {
     return g_resources.writeFileContents((m_source = fileName).data(), emit());
+}
+
+void OTMLDocument::addGlobalAlias(const std::string& name, const std::string& value)
+{
+    m_globalAliases[name] = value;
+}
+
+const std::unordered_map<std::string, std::string>& OTMLDocument::globalAliases() const
+{
+    return m_globalAliases;
 }

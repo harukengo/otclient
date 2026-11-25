@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -48,39 +48,81 @@ void UIProgressRect::drawSelf(const DrawPoolType drawPane)
     const auto& drawRect = getPaddingRect();
 
     if (m_showProgress) {
-        // 0% - 12.5% (12.5)
-        // triangle from top center, to top right (var x)
-        if (m_percent < 12.5) {
-            const auto& var = Point(std::max<int>(m_percent - 0.0, 0.0) * (drawRect.right() - drawRect.horizontalCenter()) / 12.5, 0);
-            g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topRight() + Point(1, 0), drawRect.topCenter() + var, m_backgroundColor);
-        }
+        if (m_percentReverse) {
+            // Sector 1: 0% - 12.5% (12.5)
+            if (m_percent >= 12.5) {
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topRight() + Point(1, 0), drawRect.topCenter(), m_backgroundColor);
+            } else if (m_percent > 0) {
+                const auto& var = Point(m_percent * (drawRect.right() - drawRect.horizontalCenter()) / 12.5, 0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topCenter() + var, drawRect.topCenter(), m_backgroundColor);
+            }
 
-        // 12.5% - 37.5% (25)
-        // triangle from top right to bottom right (var y)
-        if (m_percent < 37.5) {
-            const auto& var = Point(0, std::max<int>(m_percent - 12.5, 0.0) * (drawRect.bottom() - drawRect.top()) / 25.0);
-            g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomRight() + Point(1), drawRect.topRight() + var + Point(1, 0), m_backgroundColor);
-        }
+            // Sector 2: 12.5% - 37.5% (25)
+            if (m_percent >= 37.5) {
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomRight() + Point(1), drawRect.topRight() + Point(1, 0), m_backgroundColor);
+            } else if (m_percent > 12.5) {
+                const auto& var = Point(0, (m_percent - 12.5) * (drawRect.bottom() - drawRect.top()) / 25.0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topRight() + var + Point(1, 0), drawRect.topRight() + Point(1, 0), m_backgroundColor);
+            }
 
-        // 37.5% - 62.5% (25)
-        // triangle from bottom right to bottom left (var x)
-        if (m_percent < 62.5) {
-            const auto& var = Point(std::max<int>(m_percent - 37.5, 0.0) * (drawRect.right() - drawRect.left()) / 25.0, 0);
-            g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomLeft() + Point(0, 1), drawRect.bottomRight() - var + Point(1), m_backgroundColor);
-        }
+            // Sector 3: 37.5% - 62.5% (25)
+            if (m_percent >= 62.5) {
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomLeft() + Point(0, 1), drawRect.bottomRight() + Point(1), m_backgroundColor);
+            } else if (m_percent > 37.5) {
+                const auto& var = Point((m_percent - 37.5) * (drawRect.right() - drawRect.left()) / 25.0, 0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomRight() - var + Point(1), drawRect.bottomRight() + Point(1), m_backgroundColor);
+            }
 
-        // 62.5% - 87.5% (25)
-        // triangle from bottom left to top left
-        if (m_percent < 87.5) {
-            const auto& var = Point(0, std::max<int>(m_percent - 62.5, 0.0) * (drawRect.bottom() - drawRect.top()) / 25.0);
-            g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topLeft(), drawRect.bottomLeft() - var + Point(0, 1), m_backgroundColor);
-        }
+            // Sector 4: 62.5% - 87.5% (25)
+            if (m_percent >= 87.5) {
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topLeft(), drawRect.bottomLeft() + Point(0, 1), m_backgroundColor);
+            } else if (m_percent > 62.5) {
+                const auto& var = Point(0, (m_percent - 62.5) * (drawRect.bottom() - drawRect.top()) / 25.0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomLeft() - var + Point(0, 1), drawRect.bottomLeft() + Point(0, 1), m_backgroundColor);
+            }
 
-        // 87.5% - 100% (12.5)
-        // triangle from top left to top center
-        if (m_percent < 100) {
-            const auto& var = Point(std::max<int>(m_percent - 87.5, 0.0) * (drawRect.horizontalCenter() - drawRect.left()) / 12.5, 0);
-            g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topCenter(), drawRect.topLeft() + var, m_backgroundColor);
+            // Sector 5: 87.5% - 100% (12.5)
+            if (m_percent >= 100) {
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topCenter(), drawRect.topLeft(), m_backgroundColor);
+            } else if (m_percent > 87.5) {
+                const auto& var = Point((m_percent - 87.5) * (drawRect.horizontalCenter() - drawRect.left()) / 12.5, 0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topLeft() + var, drawRect.topLeft(), m_backgroundColor);
+            }
+        } else {
+            // 0% - 12.5% (12.5)
+            // triangle from top center, to top right (var x)
+            if (m_percent < 12.5) {
+                const auto& var = Point(std::max<int>(m_percent - 0.0, 0.0) * (drawRect.right() - drawRect.horizontalCenter()) / 12.5, 0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topRight() + Point(1, 0), drawRect.topCenter() + var, m_backgroundColor);
+            }
+
+            // 12.5% - 37.5% (25)
+            // triangle from top right to bottom right (var y)
+            if (m_percent < 37.5) {
+                const auto& var = Point(0, std::max<int>(m_percent - 12.5, 0.0) * (drawRect.bottom() - drawRect.top()) / 25.0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomRight() + Point(1), drawRect.topRight() + var + Point(1, 0), m_backgroundColor);
+            }
+
+            // 37.5% - 62.5% (25)
+            // triangle from bottom right to bottom left (var x)
+            if (m_percent < 62.5) {
+                const auto& var = Point(std::max<int>(m_percent - 37.5, 0.0) * (drawRect.right() - drawRect.left()) / 25.0, 0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.bottomLeft() + Point(0, 1), drawRect.bottomRight() - var + Point(1), m_backgroundColor);
+            }
+
+            // 62.5% - 87.5% (25)
+            // triangle from bottom left to top left
+            if (m_percent < 87.5) {
+                const auto& var = Point(0, std::max<int>(m_percent - 62.5, 0.0) * (drawRect.bottom() - drawRect.top()) / 25.0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topLeft(), drawRect.bottomLeft() - var + Point(0, 1), m_backgroundColor);
+            }
+
+            // 87.5% - 100% (12.5)
+            // triangle from top left to top center
+            if (m_percent < 100) {
+                const auto& var = Point(std::max<int>(m_percent - 87.5, 0.0) * (drawRect.horizontalCenter() - drawRect.left()) / 12.5, 0);
+                g_drawPool.addFilledTriangle(drawRect.center(), drawRect.topCenter(), drawRect.topLeft() + var, m_backgroundColor);
+            }
         }
     }
 
@@ -152,7 +194,7 @@ void UIProgressRect::showTime(const bool showTime)
     if (!m_showTime)
         setText("");
     else if (m_running)
-        updateText(std::max<int32_t>(static_cast<int32_t>(m_duration) - static_cast<int32_t>(m_timeElapsed), 0));
+        updateProgressText(std::max<int32_t>(static_cast<int32_t>(m_duration) - static_cast<int32_t>(m_timeElapsed), 0));
 }
 
 void UIProgressRect::showProgress(const bool showProgress)
@@ -172,6 +214,16 @@ uint32_t UIProgressRect::getTimeElapsed()
     return (std::min)(m_timeElapsed, m_duration);
 }
 
+void UIProgressRect::setPercentReverse(bool percentReverse)
+{
+	if (m_percentReverse == percentReverse)
+		return;
+
+    m_percentReverse = percentReverse;
+    repaint();
+}
+
+
 void UIProgressRect::onStyleApply(const std::string_view styleName, const OTMLNodePtr& styleNode)
 {
     UIWidget::onStyleApply(styleName, styleNode);
@@ -185,6 +237,8 @@ void UIProgressRect::onStyleApply(const std::string_view styleName, const OTMLNo
             showTime(node->value<bool>());
         else if (node->tag() == "show-progress")
             showProgress(node->value<bool>());
+        else if (node->tag() == "percent-reverse")
+            setPercentReverse(node->value<bool>());
     }
 }
 
@@ -210,7 +264,7 @@ void UIProgressRect::updateProgress()
 
     const int32_t remainingMs = std::max<int32_t>(static_cast<int32_t>(m_duration) - static_cast<int32_t>(m_timeElapsed), 0);
     if (m_showTime)
-        updateText(static_cast<uint32_t>(remainingMs));
+        updateProgressText(static_cast<uint32_t>(remainingMs));
 
     callLuaField("onProgressUpdate", m_percent, (std::max)(remainingMs, 0), m_timeElapsed);
 
@@ -223,7 +277,7 @@ void UIProgressRect::updateProgress()
     scheduleNextUpdate();
 }
 
-void UIProgressRect::updateText(const uint32_t remainingTimeMs)
+void UIProgressRect::updateProgressText(const uint32_t remainingTimeMs)
 {
     if (!m_showTime)
         return;

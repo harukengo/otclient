@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,13 +24,15 @@
 
 #include "attachableobject.h"
 #include "staticdata.h"
-#include <framework/core/timer.h>
 
-// @bindclass
+ // @bindclass
 #pragma pack(push,1) // disable memory alignment
 class Thing : public AttachableObject
 {
 public:
+    Thing();
+    ~Thing() override;
+
     virtual void draw(const Point& /*dest*/, bool /*drawThings*/ = true, LightView* = nullptr) {}
     virtual void drawLight(const Point& /*dest*/, LightView*) {}
 
@@ -149,6 +151,7 @@ public:
     bool hasLensHelp() const;
     bool hasDisplacement() const;
     bool hasElevation() const;
+    bool hasFloorChange() const;
     bool hasAction() const;
     bool hasWearOut() const;
     bool hasClockExpire() const;
@@ -157,9 +160,16 @@ public:
     bool hasAnimationPhases() const;
     bool isDecoKit() const;
     bool isAmmo();
+    bool isDualWield();
 
     PLAYER_ACTION getDefaultAction();
     uint16_t getClassification();
+    uint32_t getCyclopediaType() const;
+    uint32_t getProficiencyId() const;
+    uint32_t getWeaponType() const;
+    uint32_t getMinimumLevel() const;
+    uint32_t getImbueSlots() const;
+    std::vector<uint32_t> getRestrictVocation() const;
 
     bool canDraw(const Color& color = Color::white) const;
 

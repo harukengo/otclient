@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@
 #include "uiminimap.h"
 
 #include "minimap.h"
+#include "satellitemap.h"
 #include "uimapanchorlayout.h"
 #include "framework/otml/otmlnode.h"
 #include "framework/ui/uilayout.h"
@@ -37,7 +38,12 @@ void UIMinimap::drawSelf(const DrawPoolType drawPane)
     if (!m_layout)
         m_layout = std::make_shared<UIMapAnchorLayout>(static_self_cast<UIWidget>());
 
-    g_minimap.draw(getPaddingRect(), m_cameraPosition, m_scale, m_color);
+    if (m_satelliteMode && g_satelliteMap.hasChunksForView(m_cameraPosition.z))
+        g_satelliteMap.draw(getPaddingRect(), m_cameraPosition, m_scale, m_color, m_floorSeparatorOpacity);
+    else if (m_useStaticMinimap && g_satelliteMap.hasMinimapChunksForFloor(m_cameraPosition.z))
+        g_satelliteMap.drawStaticMinimap(getPaddingRect(), m_cameraPosition, m_scale, m_color);
+    else
+        g_minimap.draw(getPaddingRect(), m_cameraPosition, m_scale, m_color);
 }
 
 bool UIMinimap::setZoom(const int8_t zoom)

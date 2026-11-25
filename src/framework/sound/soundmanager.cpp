@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,10 @@
 
 #include "soundmanager.h"
 #include <nlohmann/json.hpp>
+#include <algorithm>
+#ifdef FRAMEWORK_PROTOBUF
 #include <sounds.pb.h>
+#endif
 
 #include "soundbuffer.h"
 #include "soundchannel.h"
@@ -36,8 +39,18 @@
 #include "framework/core/clock.h"
 #include "framework/core/garbagecollection.h"
 #include "framework/core/resourcemanager.h"
+#include "framework/util/stats.h"
 
+#ifdef FRAMEWORK_PROTOBUF
 using namespace otclient::protobuf;
+#endif
+
+#ifndef ALC_ALL_DEVICES_SPECIFIER
+#define ALC_ALL_DEVICES_SPECIFIER 0x1013
+#endif
+#ifndef ALC_DEFAULT_ALL_DEVICES_SPECIFIER
+#define ALC_DEFAULT_ALL_DEVICES_SPECIFIER 0x1012
+#endif
 
 using json = nlohmann::json;
 
@@ -50,26 +63,38 @@ void SoundManager::init()
     g_androidManager.attachToAppMainThread();
 #endif
 
-    m_device = alcOpenDevice(nullptr);
+    const char* devName = m_audioDevice.empty() ? nullptr : m_audioDevice.c_str();
+    m_device = alcOpenDevice(devName);
+    if (!m_device && !m_audioDevice.empty()) {
+        g_logger.warning(fmt::format("Unable to open audio device '{}', falling back to default", m_audioDevice));
+        m_audioDevice.clear();
+        m_device = alcOpenDevice(nullptr);
+    }
     if (!m_device) {
-        g_logger.error("unable to open audio device");
+        g_logger.error("Unable to open audio device");
         return;
     }
 
     m_context = alcCreateContext(m_device, nullptr);
     if (!m_context) {
         g_logger.error(fmt::format("unable to create audio context: {}", alcGetString(m_device, alcGetError(m_device))));
+        alcCloseDevice(m_device);
+        m_device = nullptr;
         return;
     }
 
     if (alcMakeContextCurrent(m_context) != ALC_TRUE) {
         g_logger.error(fmt::format("unable to make context current: {}", alcGetString(m_device, alcGetError(m_device))));
     }
+
+    refreshProtocolSoundSettings();
+    m_itemAmbienceDirty = true;
 }
 
 void SoundManager::terminate()
 {
     ensureContext();
+    resetItemAmbience();
 
     for (auto& streamFile : m_streamFiles) {
         auto& future = streamFile.second;
@@ -80,6 +105,13 @@ void SoundManager::terminate()
     m_sources.clear();
     m_buffers.clear();
     m_channels.clear();
+    m_itemAmbientEffectsByClientId.clear();
+    m_clientItemAmbientEffects.clear();
+    m_protocolLastPlayedAt.clear();
+    m_recentProtocolDebugEvents.clear();
+    m_pendingDirtyTiles.clear();
+    m_soundPathPrefix.clear();
+    m_cachedProtocolVersion = -1;
 
     m_audioEnabled = false;
 
@@ -98,6 +130,7 @@ void SoundManager::terminate()
 
 void SoundManager::poll()
 {
+    AutoStat s(STATS_MAIN, "PollSounds");
     static ticks_t lastUpdate = 0;
     static uint_fast8_t soundsErased = 0;
 
@@ -109,6 +142,19 @@ void SoundManager::poll()
     lastUpdate = now;
 
     ensureContext();
+
+    if (m_itemAmbienceDirty) {
+        rebuildItemAmbience();
+        m_itemAmbienceDirty = false;
+        m_itemAmbienceTilesDirty = false;
+        m_pendingDirtyTiles.clear();
+    } else if (m_itemAmbienceTilesDirty) {
+        for (const auto& tilePos : m_pendingDirtyTiles)
+            updateTrackedAmbientTile(tilePos);
+        m_pendingDirtyTiles.clear();
+        m_itemAmbienceTilesDirty = false;
+        updateItemAmbienceSources();
+    }
 
     for (auto it = m_streamFiles.begin(); it != m_streamFiles.end();) {
         const auto& source = it->first;
@@ -165,7 +211,122 @@ void SoundManager::setAudioEnabled(const bool enable)
         for (const auto& source : m_sources) {
             source->stop();
         }
+        resetItemAmbience();
+        m_protocolLastPlayedAt.clear();
+        m_recentProtocolDebugEvents.clear();
+    } else {
+        m_itemAmbienceDirty = true;
     }
+}
+
+std::vector<std::string> SoundManager::getAudioDevices()
+{
+    std::vector<std::string> devices;
+    const ALCchar* deviceList = nullptr;
+
+    if (alcIsExtensionPresent(nullptr, "ALC_ENUMERATE_ALL_EXT") == ALC_TRUE) {
+        deviceList = alcGetString(nullptr, ALC_ALL_DEVICES_SPECIFIER);
+    } else if (alcIsExtensionPresent(nullptr, "ALC_ENUMERATION_EXT") == ALC_TRUE) {
+        deviceList = alcGetString(nullptr, ALC_DEVICE_SPECIFIER);
+    }
+
+    if (deviceList) {
+        while (*deviceList != '\0') {
+            devices.emplace_back(deviceList);
+            deviceList += strlen(deviceList) + 1;
+        }
+    }
+    return devices;
+}
+
+bool SoundManager::setAudioDevice(const std::string& deviceName)
+{
+    std::string targetDevice = deviceName;
+    if (targetDevice == "(auto-select)" || targetDevice == "auto") {
+        targetDevice.clear();
+    }
+
+    if (m_audioDevice == targetDevice && m_device && m_context) {
+        return true;
+    }
+
+    const char* devName = targetDevice.empty() ? nullptr : targetDevice.c_str();
+
+    if (m_device) {
+        if (alcIsExtensionPresent(m_device, "ALC_SOFT_reopen_device") == ALC_TRUE) {
+            typedef ALCboolean(ALC_APIENTRY* LPALCREOPENDEVICESOFT)(ALCdevice* device, const ALCchar* deviceName, const ALCint* attribs);
+            const auto alcReopenDeviceSOFT = reinterpret_cast<LPALCREOPENDEVICESOFT>(alcGetProcAddress(m_device, "alcReopenDeviceSOFT"));
+            if (alcReopenDeviceSOFT) {
+                if (alcReopenDeviceSOFT(m_device, devName, nullptr) == ALC_TRUE) {
+                    m_audioDevice = targetDevice;
+                    return true;
+                }
+                g_logger.warning(fmt::format("alcReopenDeviceSOFT failed for device '{}'", deviceName));
+            }
+        }
+
+        restartAudioDevice(targetDevice);
+        return m_device != nullptr && m_context != nullptr;
+    }
+
+    m_audioDevice = targetDevice;
+    init();
+    return m_device != nullptr && m_context != nullptr;
+}
+
+void SoundManager::restartAudioDevice(const std::string& targetDevice)
+{
+    m_audioDevice = targetDevice;
+
+    stopAll();
+    resetItemAmbience();
+
+    for (auto& streamFile : m_streamFiles) {
+        auto& future = streamFile.second;
+        future.wait();
+    }
+    m_streamFiles.clear();
+
+    m_sources.clear();
+    m_buffers.clear();
+    m_effects.clear();
+
+    alcMakeContextCurrent(nullptr);
+    if (m_context) {
+        alcDestroyContext(m_context);
+        m_context = nullptr;
+    }
+    if (m_device) {
+        alcCloseDevice(m_device);
+        m_device = nullptr;
+    }
+
+    const char* devName = m_audioDevice.empty() ? nullptr : m_audioDevice.c_str();
+    m_device = alcOpenDevice(devName);
+    if (!m_device && !m_audioDevice.empty()) {
+        g_logger.warning(fmt::format("Unable to open audio device '{}', falling back to default", m_audioDevice));
+        m_audioDevice.clear();
+        m_device = alcOpenDevice(nullptr);
+    }
+
+    if (!m_device) {
+        g_logger.error("Unable to open fallback audio device");
+        return;
+    }
+
+    m_context = alcCreateContext(m_device, nullptr);
+    if (!m_context) {
+        g_logger.error(fmt::format("unable to create audio context: {}", alcGetString(m_device, alcGetError(m_device))));
+        alcCloseDevice(m_device);
+        m_device = nullptr;
+        return;
+    }
+
+    if (alcMakeContextCurrent(m_context) != ALC_TRUE) {
+        g_logger.error(fmt::format("unable to make context current: {}", alcGetString(m_device, alcGetError(m_device))));
+    }
+
+    refreshProtocolSoundSettings();
 }
 
 void SoundManager::preload(std::string filename)
@@ -204,7 +365,7 @@ SoundSourcePtr SoundManager::play(const std::string& fn, const float fadetime, f
     const std::string& filename = resolveSoundFile(fn);
     const auto& soundSource = createSoundSource(filename);
     if (!soundSource) {
-        g_logger.error("unable to play '{}'", filename);
+        g_logger.error("Unable to play '{}'", filename);
         return nullptr;
     }
 
@@ -231,15 +392,90 @@ SoundChannelPtr SoundManager::getChannel(int channel)
     return m_channels[channel];
 }
 
+SoundSourcePtr SoundManager::playChannelSound(const int channelId, const std::string& filename, const float fadetime, float gain, float pitch)
+{
+    const auto channel = getChannel(channelId);
+    if (!channel || !channel->isEnabled())
+        return nullptr;
+
+    if (gain == 0)
+        gain = 1.0f;
+
+    if (pitch == 0)
+        pitch = 1.0f;
+
+    const auto source = play(filename, fadetime, channel->getGain() * gain, channel->getPitch() * pitch);
+    if (!source)
+        return nullptr;
+
+    source->setChannel(static_cast<uint8_t>(channelId));
+    source->setPosition(channel->getPosition());
+    return source;
+}
+
+void SoundManager::playUiSoundById(const int soundId)
+{
+    if (soundId <= 0)
+        return;
+
+    std::string fileName = getAudioFileNameById(soundId);
+    if (fileName.empty()) {
+        const auto soundIds = getRandomSoundIds(soundId);
+        if (!soundIds.empty())
+            fileName = getAudioFileNameById(soundIds.front());
+    }
+
+    if (fileName.empty())
+        return;
+
+    playChannelSound(CHANNEL_UI, buildProtocolSoundPath(fileName));
+}
+
+void SoundManager::stopChannelSounds(const int channelId, const SoundSource* except)
+{
+    ensureContext();
+
+    for (const auto& source : m_sources) {
+        if (!source || source.get() == except || source->getChannel() != channelId)
+            continue;
+
+        source->stop();
+    }
+}
+
 void SoundManager::stopAll()
 {
     ensureContext();
+    resetItemAmbience();
+    m_protocolLastPlayedAt.clear();
+    m_recentProtocolDebugEvents.clear();
     for (const auto& source : m_sources) {
         source->stop();
     }
 
     for (const auto& it : m_channels) {
         it.second->stop();
+    }
+}
+
+void SoundManager::stopAllChannelsExcept(const int excludedChannel)
+{
+    ensureContext();
+    resetItemAmbience();
+    m_protocolLastPlayedAt.clear();
+    m_recentProtocolDebugEvents.clear();
+
+    for (const auto& [channelId, channel] : m_channels) {
+        if (!channel || channelId == excludedChannel)
+            continue;
+        channel->stop();
+    }
+
+    for (const auto& source : m_sources) {
+        if (!source || source->getChannel() == excludedChannel)
+            continue;
+
+        source->stop();
     }
 }
 
@@ -266,7 +502,7 @@ SoundSourcePtr SoundManager::createSoundSource(const std::string& name)
             streamSource->setRelative(true);
             streamSource->setPosition(Point(-128, 0));
             combinedSource->addSource(streamSource);
-            m_streamFiles[streamSource] = g_asyncDispatcher.submit_task([=]() -> SoundFilePtr {
+            m_streamFiles[streamSource] = g_asyncDispatcher->submit_task([=]() -> SoundFilePtr {
                 stdext::timer a;
                 try {
                     return SoundFile::loadSoundFile(filename);
@@ -281,7 +517,7 @@ SoundSourcePtr SoundManager::createSoundSource(const std::string& name)
             streamSource->setRelative(true);
             streamSource->setPosition(Point(128, 0));
             combinedSource->addSource(streamSource);
-            m_streamFiles[streamSource] = g_asyncDispatcher.submit_task([=]() -> SoundFilePtr {
+            m_streamFiles[streamSource] = g_asyncDispatcher->submit_task([=]() -> SoundFilePtr {
                 try {
                     return SoundFile::loadSoundFile(filename);
                 } catch (std::exception& e) {
@@ -293,7 +529,7 @@ SoundSourcePtr SoundManager::createSoundSource(const std::string& name)
             source = combinedSource;
 #else
             const auto& streamSource = std::make_shared<StreamSoundSource>();
-            m_streamFiles[streamSource] = g_asyncDispatcher.submit_task([=]() -> SoundFilePtr {
+            m_streamFiles[streamSource] = g_asyncDispatcher->submit_task([=]() -> SoundFilePtr {
                 try {
                     return SoundFile::loadSoundFile(filename);
                 } catch (std::exception& e) {
@@ -305,7 +541,7 @@ SoundSourcePtr SoundManager::createSoundSource(const std::string& name)
 #endif
         }
     } catch (std::exception& e) {
-        g_logger.error("failed to load sound source: '{}'", e.what());
+        g_logger.error("Failed to load sound source: '{}'", e.what());
         return nullptr;
     }
 
@@ -344,14 +580,37 @@ bool SoundManager::isEaxEnabled()
     return false;
 }
 
+void SoundManager::updateSoundPathPrefix()
+{
+    const int protocolVersion = g_game.getProtocolVersion();
+    if (protocolVersion == m_cachedProtocolVersion)
+        return;
+
+    m_cachedProtocolVersion = protocolVersion;
+    m_soundPathPrefix = protocolVersion > 0 ? fmt::format("/sounds/{}/", protocolVersion) : "";
+}
+
+std::string SoundManager::buildProtocolSoundPath(const std::string& fileName)
+{
+    updateSoundPathPrefix();
+
+    if (m_soundPathPrefix.empty())
+        return fileName;
+
+    return m_soundPathPrefix + fileName;
+}
+
+#ifdef FRAMEWORK_PROTOBUF
 using ProtobufSoundFiles = google::protobuf::RepeatedPtrField<sounds::Sound>;
 using ProtobufSoundEffects = google::protobuf::RepeatedPtrField<sounds::NumericSoundEffect>;
 using ProtobufLocationAmbiences = google::protobuf::RepeatedPtrField<sounds::AmbienceStream>;
 using ProtobufItemAmbiences = google::protobuf::RepeatedPtrField<sounds::AmbienceObjectStream>;
 using ProtobufMusicTracks = google::protobuf::RepeatedPtrField<sounds::MusicTemplate>;
+#endif
 
 bool SoundManager::loadFromProtobuf(const std::string& directory, const std::string& fileName)
 {
+#ifdef FRAMEWORK_PROTOBUF
     /*
         * file structure
         <struct> Sounds
@@ -421,6 +680,10 @@ bool SoundManager::loadFromProtobuf(const std::string& directory, const std::str
             throw stdext::exception("Couldn't parse appearances lib.");
         }
 
+        m_clientSoundEffects.clear();
+        m_clientAmbientEffects.clear();
+        m_clientMusic.clear();
+
         // deserialize audio files
         for (const auto& protobufAudioFile : protobufSounds.sound()) {
             m_clientSoundFiles[protobufAudioFile.id()] = protobufAudioFile.filename();
@@ -466,6 +729,11 @@ bool SoundManager::loadFromProtobuf(const std::string& directory, const std::str
         }
 
         // deserialize item ambients
+        resetItemAmbience();
+        m_clientItemAmbientEffects.clear();
+        m_itemAmbientEffectsByClientId.clear();
+        m_maxItemAmbientDistance = 0;
+
         for (const auto& protobufItemAmbient : protobufSounds.ambience_object_stream()) {
             std::vector<uint32_t> itemClientIds = {};
             for (const auto& itemId : protobufItemAmbient.counted_appearance_types()) {
@@ -478,12 +746,22 @@ bool SoundManager::loadFromProtobuf(const std::string& directory, const std::str
             }
 
             uint32_t effectId = protobufItemAmbient.id();
+            const auto maxSoundDistance = protobufItemAmbient.max_sound_distance() > 0 ? protobufItemAmbient.max_sound_distance() : 8;
             m_clientItemAmbientEffects.emplace(effectId, ClientItemAmbient{
                 effectId,
                 std::move(itemClientIds),
+                maxSoundDistance,
                 std::move(soundEffects)
             });
+
+            const auto& itemAmbientEffect = m_clientItemAmbientEffects.at(effectId);
+            m_maxItemAmbientDistance = std::max(m_maxItemAmbientDistance, itemAmbientEffect.maxSoundDistance);
+
+            for (const auto itemClientId : itemAmbientEffect.clientIds)
+                m_itemAmbientEffectsByClientId[itemClientId].push_back(effectId);
         }
+
+        m_itemAmbienceDirty = true;
 
         // deserialize music
         for (const auto& protobufMusicTemplate : protobufSounds.music_template()) {
@@ -500,6 +778,10 @@ bool SoundManager::loadFromProtobuf(const std::string& directory, const std::str
         g_logger.error("Failed to load soundbank '{}': {}", fileName, e.what());
         return false;
     }
+#else
+    g_logger.error("Protobuf not supported in this build. Enable FRAMEWORK_PROTOBUF");
+    return false;
+#endif
 }
 
 bool SoundManager::loadClientFiles(const std::string& directory)
@@ -525,11 +807,21 @@ bool SoundManager::loadClientFiles(const std::string& directory)
     }
 }
 
-std::string SoundManager::getAudioFileNameById(int32_t audioFileId)
+std::string SoundManager::getAudioFileNameById(int32_t audioFileId) const
 {
-    if (m_clientSoundFiles.contains(audioFileId)) {
-        return m_clientSoundFiles[audioFileId];
-    }
+    const auto it = m_clientSoundFiles.find(audioFileId);
+    return it != m_clientSoundFiles.end() ? it->second : "";
+}
 
-    return "";
+std::vector<uint32_t> SoundManager::getRandomSoundIds(uint32_t id)
+{
+    const auto it = m_clientSoundEffects.find(id);
+    if (it == m_clientSoundEffects.end())
+        return {};
+    const auto& soundEffect = it->second;
+    if (!soundEffect.randomSoundId.empty())
+        return soundEffect.randomSoundId;
+    if (soundEffect.soundId != 0)
+        return { soundEffect.soundId };
+    return {};
 }

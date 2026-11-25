@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,7 @@ StreamSoundSource::StreamSoundSource()
     for (auto& buffer : m_buffers)
         buffer = std::make_shared<SoundBuffer>();
     m_downMix = NoDownMix;
+    m_sourceKind = KindStreaming;
 }
 
 StreamSoundSource::~StreamSoundSource()
@@ -46,7 +47,7 @@ void StreamSoundSource::setFile(std::string filename)
     const SoundFilePtr soundFile = SoundFile::loadSoundFile(filename);
 
     if (!soundFile) {
-        g_logger.error("unable to load sound file '{}'", filename);
+        g_logger.error("Unable to load sound file '{}'", filename);
         return;
     }
 
@@ -58,7 +59,8 @@ void StreamSoundSource::setSoundFile(const SoundFilePtr& soundFile)
     m_soundFile = soundFile;
     if (m_waitingFile) {
         m_waitingFile = false;
-        play();
+        if (m_playing)
+            play();
     }
 }
 
@@ -90,6 +92,19 @@ void StreamSoundSource::stop()
 
     SoundSource::stop();
     unqueueBuffers();
+}
+
+
+void StreamSoundSource::setLooping(const bool looping)
+{
+    m_streamLooping = looping;
+
+    // Streaming sources loop by refilling and requeueing fragments. OpenAL
+    // source-level looping breaks that lifecycle for queued buffers.
+    alSourcei(m_sourceId, AL_LOOPING, AL_FALSE);
+    assert(alGetError() == AL_NO_ERROR);
+
+    SoundSource::m_looping = looping;
 }
 
 void StreamSoundSource::queueBuffers()
@@ -130,12 +145,12 @@ void StreamSoundSource::update()
     }
 
     if (!isBuffering() && m_playing) {
-        if (!m_looping && m_eof) {
+        if (!m_streamLooping && m_eof) {
             stop();
         } else if (processed == 0) {
             g_logger.traceError("audio buffer underrun");
             play();
-        } else if (m_looping) {
+        } else if (m_streamLooping) {
             play();
         }
     }
@@ -160,7 +175,7 @@ bool StreamSoundSource::fillBufferAndQueue(const uint32_t buffer)
 
         // end of sound file
         if (bytesRead < maxRead) {
-            if (m_looping)
+            if (m_streamLooping)
                 m_soundFile->reset();
             else {
                 m_eof = true;
@@ -184,12 +199,12 @@ bool StreamSoundSource::fillBufferAndQueue(const uint32_t buffer)
         alBufferData(buffer, format, bufferData.data(), bytesRead, m_soundFile->getRate());
         ALenum err = alGetError();
         if (err != AL_NO_ERROR)
-            g_logger.error("unable to refill audio buffer for '{}': {}", m_soundFile->getName(), alGetString(err));
+            g_logger.error("Unable to refill audio buffer for '{}': {}", m_soundFile->getName(), alGetString(err));
 
         alSourceQueueBuffers(m_sourceId, 1, &buffer);
         err = alGetError();
         if (err != AL_NO_ERROR)
-            g_logger.error("unable to queue audio buffer for '{}': {}", m_soundFile->getName(), alGetString(err));
+            g_logger.error("Unable to queue audio buffer for '{}': {}", m_soundFile->getName(), alGetString(err));
     }
 
     // return false if there aren't more buffers to fill

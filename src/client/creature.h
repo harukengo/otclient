@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,6 @@
 #include "outfit.h"
 #include "thing.h"
 #include <framework/core/declarations.h>
-#include <framework/core/timer.h>
 #include <framework/graphics/cachedtext.h>
 
 #include "staticdata.h"
@@ -152,6 +151,7 @@ public:
     const Position& getOldPosition() const { return m_oldPosition; }
     bool isInvisible() { return m_outfit.isEffect() && m_outfit.getAuxId() == 13; }
     bool isDead() { return m_healthPercent <= 0; }
+    bool isHidden() const;
     bool isFullHealth() { return m_healthPercent == 100; }
     bool canBeSeen() { return !isInvisible() || isPlayer(); }
     bool isCreature() const override { return true; }
@@ -181,6 +181,9 @@ minHeight,
     void setWidgetInformation(const UIWidgetPtr& info);
     UIWidgetPtr getWidgetInformation() { return m_widgetInformation; }
 
+    void setNameShader(const std::string& name) { m_nameShader = name; }
+    std::string getNameShader() { return m_nameShader; }
+
     void setText(const std::string& text, const Color& color);
     std::string getText();
     void clearText() { setText("", Color::white); }
@@ -202,6 +205,17 @@ minHeight,
     void setVocation(uint8_t vocation) { m_vocation = vocation; }
     uint8_t getVocation() { return m_vocation; }
 
+    void attachPaperdoll(const PaperdollPtr& obj);
+    void clearPaperdolls();
+    bool hasPaperdoll(uint16_t id);
+
+    bool detachPaperdollById(uint16_t id);
+    bool detachPaperdollByPriority(uint8_t priority);
+
+    PaperdollPtr getPaperdollById(uint16_t id);
+
+    const std::vector<PaperdollPtr>& getPaperdolls() { return m_paperdolls; };
+
 protected:
     virtual void terminateWalk();
     virtual void onWalking() {};
@@ -210,6 +224,9 @@ protected:
 
     void setOldPositionSilently(const Position& pos) { m_oldPosition = pos; }
     void setRemovedSilently(const bool removed) { m_removed = removed; }
+
+    void onDetachPaperdoll(const PaperdollPtr& paperdoll);
+    void setPaperdollsDirection(Otc::Direction dir) const;
 
     ThingType* getThingType() const override;
     ThingType* getMountThingType() const;
@@ -261,6 +278,8 @@ private:
         CachedText numberText;
     };
 
+    std::vector<PaperdollPtr> m_paperdolls;
+
     UIWidgetPtr m_widgetInformation;
 
     TilePtr m_walkingTile;
@@ -281,6 +300,7 @@ private:
     EventPtr m_disappearEvent;
 
     CachedText m_name;
+    std::string m_nameShader;
     CachedStep m_stepCache;
 
     Position m_lastStepToPosition;
@@ -297,12 +317,7 @@ private:
     Color m_staticSquareColor{ Color::white };
     Color m_informationColor{ Color::white };
 
-    struct
-    {
-        uint8_t minHeight{ 0 };
-        uint8_t height{ 0 };
-        uint16_t speed{ 0 };
-    } m_bounce;
+    Bounce m_bounce;
 
     // jump related
     Timer m_jumpTimer;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,7 @@
 
 #include "connection.h"
 
+#include "framework/util/stats.h"
 #include "framework/core/graphicalapplication.h"
 
 asio::io_service g_ioService;
@@ -47,7 +48,8 @@ Connection::~Connection()
 
 void Connection::poll()
 {
-    // reset must always be called prior to poll
+	// reset must always be called prior to poll
+	AutoStat s(STATS_MAIN, "PollConnection");
     g_ioService.reset();
     g_ioService.poll();
 }
@@ -93,14 +95,14 @@ void Connection::connect(const std::string_view host, const uint16_t port, const
     m_connectCallback = connectCallback;
 
     const asio::ip::tcp::resolver::query query(host.data(), stdext::unsafe_cast<std::string>(port));
-    m_resolver.async_resolve(query, [this](auto&& error, auto&& endpointIterator) {
-        onResolve(std::move(error), std::move(endpointIterator));
+    m_resolver.async_resolve(query, [capture0 = asConnection()](auto&& error, auto&& endpointIterator) {
+        capture0->onResolve(std::move(error), std::move(endpointIterator));
     });
 
     m_readTimer.cancel();
     m_readTimer.expires_after(std::chrono::seconds(static_cast<uint32_t>(READ_TIMEOUT)));
-    m_readTimer.async_wait([this](auto&& error) {
-        onTimeout(std::move(error));
+    m_readTimer.async_wait([capture0 = asConnection()](auto&& error) {
+        capture0->onTimeout(std::move(error));
     });
 }
 
@@ -228,7 +230,7 @@ void Connection::onResolve(const std::error_code& error, const asio::ip::basic_r
 {
     m_readTimer.cancel();
 
-    if (error == asio::error::operation_aborted)
+    if (error == asio::error::operation_aborted || !m_connecting)
         return;
 
     if (!error)

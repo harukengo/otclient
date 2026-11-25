@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,6 +26,7 @@
 
 #include <framework/core/timer.h>
 #include <framework/graphics/declarations.h>
+#include <framework/graphics/coordsbuffer.h>
 #include <framework/html/declarations.h>
 #include <framework/luaengine/luaobject.h>
 
@@ -193,6 +194,25 @@ enum class OverflowType : uint8_t
     Clip
 };
 
+enum WidgetEvents : int
+{
+    EVENT_TEXT_CLICK = 1,
+    EVENT_TEXT_HOVER = 2
+};
+
+const std::unordered_map<std::string, WidgetEvents> eventMap = {
+    {"text-click", EVENT_TEXT_CLICK},
+    {"text-hover", EVENT_TEXT_HOVER}
+};
+
+struct TextEvent
+{
+    std::string word;
+    size_t startPos;
+    size_t endPos;
+    bool noUnderline = false;
+};
+
 struct SizeUnit
 {
     bool needsUpdate(Unit _unit) const {
@@ -203,7 +223,7 @@ struct SizeUnit
         return pendingUpdate && unit == _unit && version != _version;
     }
 
-    void applyUpdate(int16_t v, uint32_t newVersion) {
+    void applyUpdate(int32_t v, uint32_t newVersion) {
         valueCalculed = v;
         version = newVersion;
         pendingUpdate = false;
@@ -211,13 +231,13 @@ struct SizeUnit
 
     SizeUnit() = default;
     SizeUnit(Unit u) : unit(u) {}
-    SizeUnit(int16_t v) : unit(Unit::Px), value(v) {}
-    SizeUnit(Unit u, int16_t v, int16_t valueCalculed, uint32_t needUpdate)
+    SizeUnit(int32_t v) : unit(Unit::Px), value(v) {}
+    SizeUnit(Unit u, int32_t v, int32_t valueCalculed, uint32_t needUpdate)
         : unit(u), value(v), valueCalculed(valueCalculed), pendingUpdate(needUpdate) {}
 
     Unit unit = Unit::Px;
-    int16_t value = 0;
-    int16_t valueCalculed = -1;
+    int32_t value = 0;
+    int32_t valueCalculed = -1;
     uint32_t version = 0;
     bool pendingUpdate = false;
 };
@@ -279,8 +299,17 @@ struct UIWidgetStyle
     int minHeight{ 0 };
     int maxWidth{ 0 };
     int maxHeight{ 0 };
+    bool marginTopAuto{ false };
+    bool marginBottomAuto{ false };
     bool marginLeftAuto{ false };
     bool marginRightAuto{ false };
+};
+
+enum UISoundType : int
+{
+    UISoundTypeNone = 0,
+    UISoundTypeClick = 1,
+    UISoundTypeShow = 2
 };
 
 // @bindclass
@@ -309,6 +338,7 @@ protected:
 
     std::string m_source;
     int16_t m_childIndex{ -1 };
+    int8_t m_events{ 0 };
 
     Rect m_rect;
     Point m_virtualOffset;
@@ -323,6 +353,7 @@ protected:
     OverflowType m_overflowType = OverflowType::Hidden;
     PositionType m_positionType = PositionType::Static;
     uint32_t m_flexLayoutVersion = 0;
+    bool m_inFlexLayout = false;
     Fw::AlignmentFlag m_placement = Fw::AlignNone;
     SizeUnit m_width;
     SizeUnit m_height;
@@ -351,6 +382,7 @@ protected:
     friend class UIGridLayout;
     friend class UIHorizontalLayout;
     friend class UIVerticalLayout;
+    friend void layoutFlex(UIWidget& container);
 
 public:
     UIWidgetPtr insert(int32_t index, const std::string& html);
@@ -419,6 +451,9 @@ public:
     void setAutoFocusPolicy(Fw::AutoFocusPolicy policy);
     void setAutoRepeatDelay(const int delay) { m_autoRepeatDelay = delay; }
     void setVirtualOffset(const Point& offset);
+    void setClickSound(int soundId);
+    void addSound(int soundType, int soundId);
+    void removeSound(int soundType);
     void setDisplay(DisplayType type);
     void setFloat(FloatType type) { m_floatType = type;  scheduleHtmlTask(PropApplyAnchorAlignment); }
     void setClear(ClearType type) { m_clearType = type;  scheduleHtmlTask(PropApplyAnchorAlignment); }
@@ -453,6 +488,7 @@ public:
     AlignSelf getAlignSelf() const { return m_flexItem.alignSelf; }
     void setHtmlNode(const HtmlNodePtr& node) { m_htmlNode = node; }
     void setOverflow(OverflowType type);
+    void setOverflow(std::string type);
     void setPositionType(PositionType t) {
         m_positionType = t;
 
@@ -488,6 +524,7 @@ public:
     auto getPositionType() { return m_positionType; }
 
     bool isOnHtml() { return m_htmlNode != nullptr; }
+    bool isInFlexLayout() const { return m_inFlexLayout; }
     const auto& getHtmlNode() const { return m_htmlNode; }
     auto& getWidthHtml() { return m_width; }
     auto& getHeightHtml() { return m_height; }
@@ -498,6 +535,7 @@ public:
     int getChildIndex(const UIWidgetPtr& child = nullptr) { return child ? (child->getParent().get() == this ? child->m_childIndex : -1) : m_childIndex; }
     auto getDisplay() { return m_displayType; }
     auto getFloat() { return m_floatType; }
+    auto getOverflow() { return m_overflowType; }
     auto getJustifyItems() { return m_JustifyItems; }
 
     UIWidgetPtr getVirtualParent() const;
@@ -527,6 +565,7 @@ public:
     UIWidgetPtr getChildByIndex(int index);
     UIWidgetPtr getChildByState(Fw::WidgetState state);
     UIWidgetPtr getChildByStyleName(std::string_view styleName);
+    UIWidgetPtr getNearestChild(const Point& pos);
     UIWidgetPtr recursiveGetChildById(std::string_view id);
     UIWidgetPtr recursiveGetChildByPos(const Point& childPos, bool wantsPhantom);
     UIWidgetPtr recursiveGetChildByState(Fw::WidgetState state, bool wantsPhantom);
@@ -536,6 +575,7 @@ public:
     UIWidgetList recursiveGetChildrenByState(Fw::WidgetState state);
     UIWidgetList recursiveGetChildrenByStyleName(std::string_view styleName);
     UIWidgetPtr backwardsGetWidgetById(std::string_view id);
+    bool hasEventListener(WidgetEvents event) { return (m_events & event) != 0; }
 
     std::vector<UIWidgetPtr> querySelectorAll(const std::string& selector);
     UIWidgetPtr querySelector(const std::string& selector);
@@ -549,6 +589,9 @@ public:
     void disableUpdateTemporarily();
     void addOnDestroyCallback(const std::string& id, const std::function<void()>&& callback);
     void removeOnDestroyCallback(const std::string&);
+
+    void setEventListener(WidgetEvents event);
+    void removeEventListener(WidgetEvents event);
 
     void setBackgroundDrawOrder(const uint8_t order) { m_backgroundDrawOrder = static_cast<DrawOrder>(std::min<uint8_t>(order, LAST - 1)); }
     void setImageDrawOrder(const uint8_t order) { m_imageDrawOrder = static_cast<DrawOrder>(std::min<uint8_t>(order, LAST - 1)); }
@@ -585,6 +628,7 @@ private:
     void applyAnchorAlignment();
     void layoutFlexChildren();
     void scheduleHtmlTask(FlagProp prop);
+    static void flushPendingHtmlWidgets();
 
     OTMLNodePtr m_stateStyle;
     int32_t m_states{ Fw::DefaultState };
@@ -612,6 +656,7 @@ protected:
     virtual bool onMouseWheel(const Point& mousePos, Fw::MouseWheelDirection direction);
     virtual bool onClick(const Point& mousePos);
     virtual bool onDoubleClick(const Point& mousePos);
+    virtual void onTextHoverChange(const std::string& text, bool hovered);
 
     friend class UILayout;
 
@@ -682,6 +727,8 @@ public:
     UIWidgetPtr getFocusedChild() { return m_focusedChild; }
     UIWidgetPtr getHoveredChild();
     UIWidgetList getChildren() { return m_children; }
+    UIWidgetList& getChildrenRef() { return m_children; }
+    const UIWidgetList& getChildrenRef() const { return m_children; }
     UIWidgetList getReverseChildren() { return UIWidgetList(m_children.rbegin(), m_children.rend()); }
     UIWidgetPtr getFirstChild() { return getChildByIndex(1); }
     UIWidgetPtr getLastChild() { return getChildByIndex(-1); }
@@ -694,6 +741,10 @@ public:
     Point getVirtualOffset() { return m_virtualOffset; }
     std::string getStyleName();
     Point getLastClickPosition() { return m_lastClickPosition; }
+
+    // for stats only
+    bool isRootChild() const { return m_isRootChild; }
+    void setRootChild(const bool v) { m_isRootChild = v; }
 
     // base style
 private:
@@ -717,23 +768,27 @@ protected:
     EdgeGroup<> m_borderWidth;
     EdgeGroup<> m_margin;
     EdgeGroup<> m_padding;
+    bool m_marginTopAuto{ false };
+    bool m_marginBottomAuto{ false };
     bool m_marginLeftAuto{ false };
     bool m_marginRightAuto{ false };
     float m_opacity{ 1.f };
     float m_rotation{ 0.f };
     uint16_t m_autoRepeatDelay{ 500 };
     Point m_lastClickPosition;
+    bool m_isRootChild{ false }; // for stats
 
     DrawOrder m_textDrawOrder{ DrawOrder::FIRST };
+    std::unordered_map<int, int> m_uiSounds;
 
 public:
     void setX(const int x) { move(x, getY()); }
     void setY(const int y) { move(getX(), y); }
 
     void setTop(int v) { m_positions.top.unit = Unit::Px; m_positions.top.value = v; scheduleHtmlTask(PropUpdateSize); scheduleHtmlTask(PropApplyAnchorAlignment); updateLayout(); }
-    void setBottom(int v) { m_positions.top.unit = Unit::Px; m_positions.bottom.value = v; scheduleHtmlTask(PropUpdateSize); scheduleHtmlTask(PropApplyAnchorAlignment); updateLayout(); }
-    void setLeft(int v) { m_positions.top.unit = Unit::Px; m_positions.left.value = v;  scheduleHtmlTask(PropUpdateSize); scheduleHtmlTask(PropApplyAnchorAlignment); updateLayout(); }
-    void setRight(int v) { m_positions.top.unit = Unit::Px; m_positions.right.value = v;  scheduleHtmlTask(PropUpdateSize); scheduleHtmlTask(PropApplyAnchorAlignment); updateLayout(); }
+    void setBottom(int v) { m_positions.bottom.unit = Unit::Px; m_positions.bottom.value = v; scheduleHtmlTask(PropUpdateSize); scheduleHtmlTask(PropApplyAnchorAlignment); updateLayout(); }
+    void setLeft(int v) { m_positions.left.unit = Unit::Px; m_positions.left.value = v;  scheduleHtmlTask(PropUpdateSize); scheduleHtmlTask(PropApplyAnchorAlignment); updateLayout(); }
+    void setRight(int v) { m_positions.right.unit = Unit::Px; m_positions.right.value = v;  scheduleHtmlTask(PropUpdateSize); scheduleHtmlTask(PropApplyAnchorAlignment); updateLayout(); }
 
     void setHeight(std::string heightStr) { applyDimension(false, std::move(heightStr)); }
     void setWidth(std::string widthStr) { applyDimension(true, std::move(widthStr)); }
@@ -747,7 +802,7 @@ public:
     void setMinSize(const Size& minSize) { m_minSize = minSize; setRect(m_rect); }
     void setMaxSize(const Size& maxSize) { m_maxSize = maxSize; setRect(m_rect); }
     void setPosition(const Point& pos) { move(pos.x, pos.y); }
-    void setColor(const Color& color) { m_color = color; repaint(); }
+    void setColor(const Color& color);
     void setBackgroundColor(const Color& color) { m_backgroundColor = color; repaint(); }
     void setBackgroundOffsetX(const int x) { m_backgroundRect.setX(x); repaint(); }
     void setBackgroundOffsetY(const int y) { m_backgroundRect.setX(y); repaint(); }
@@ -777,13 +832,15 @@ public:
     void setBorderColorRight(const Color& color) { m_borderColor.right = color; repaint(); }
     void setBorderColorBottom(const Color& color) { m_borderColor.bottom = color; repaint(); }
     void setBorderColorLeft(const Color& color) { m_borderColor.left = color; repaint(); }
-    void setMargin(const int margin) { m_margin.set(margin); m_marginLeftAuto = m_marginRightAuto = false; updateParentLayout(); }
-    void setMarginHorizontal(const int margin) { m_margin.right = m_margin.left = margin; m_marginLeftAuto = m_marginRightAuto = false; updateParentLayout(); }
-    void setMarginVertical(const int margin) { m_margin.bottom = m_margin.top = margin; updateParentLayout(); }
-    void setMarginTop(const int margin) { m_margin.top = margin; updateParentLayout(); }
-    void setMarginRight(const int margin) { m_margin.right = margin; m_marginRightAuto = false; updateParentLayout(); }
-    void setMarginBottom(const int margin) { m_margin.bottom = margin; updateParentLayout(); }
-    void setMarginLeft(const int margin) { m_margin.left = margin; m_marginLeftAuto = false; updateParentLayout(); }
+    void setMargin(const int margin) { m_margin.set(margin); m_marginTopAuto = m_marginBottomAuto = m_marginLeftAuto = m_marginRightAuto = false; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginHorizontal(const int margin) { m_margin.right = m_margin.left = margin; m_marginLeftAuto = m_marginRightAuto = false; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginVertical(const int margin) { m_margin.bottom = m_margin.top = margin; m_marginTopAuto = m_marginBottomAuto = false; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginTop(const int margin) { m_margin.top = margin; m_marginTopAuto = false; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginRight(const int margin) { m_margin.right = margin; m_marginRightAuto = false; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginBottom(const int margin) { m_margin.bottom = margin; m_marginBottomAuto = false; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginLeft(const int margin) { m_margin.left = margin; m_marginLeftAuto = false; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginTopAuto(bool v = true) { m_marginTopAuto = v; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
+    void setMarginBottomAuto(bool v = true) { m_marginBottomAuto = v; updateParentLayout(); scheduleParentHtmlFlexLayout(); }
     void setMarginLeftAuto(bool v = true) { m_marginLeftAuto = v; updateParentLayout(); }
     void setMarginRightAuto(bool v = true) { m_marginRightAuto = v; updateParentLayout(); }
     void setPadding(const int padding) { m_padding.top = m_padding.right = m_padding.bottom = m_padding.left = padding; updateLayout(); }
@@ -841,6 +898,8 @@ public:
     int getMarginRight() { return m_margin.right; }
     int getMarginBottom() { return m_margin.bottom; }
     int getMarginLeft() { return m_margin.left; }
+    bool isMarginTopAuto() const { return m_marginTopAuto; }
+    bool isMarginBottomAuto() const { return m_marginBottomAuto; }
     bool isMarginLeftAuto() const { return m_marginLeftAuto; }
     bool isMarginRightAuto() const { return m_marginRightAuto; }
     int getPaddingTop() { return m_padding.top; }
@@ -856,8 +915,9 @@ private:
     void initImage();
     void parseImageStyle(const OTMLNodePtr& styleNode);
     void applyDimension(bool isWidth, std::string valueStr);
-    void applyDimension(bool isWidth, Unit unit, int16_t value);
+    void applyDimension(bool isWidth, Unit unit, int32_t value);
     void refreshHtml(bool siblingsTo = false);
+    void invalidateHtmlAncestorsHeight();
 
     void updateImageCache() { if (!m_imageCachedScreenCoords.isNull()) m_imageCachedScreenCoords = {}; }
     void configureBorderImage() { setProp(PropImageBordered, true); updateImageCache(); }
@@ -933,6 +993,8 @@ private:
     Rect m_textCachedScreenCoords;
     Size m_textSize;
     Size m_realTextSize;
+    int m_textWrapWidth{ -1 };
+    void playUiSound(int soundType);
 
 protected:
     virtual void updateText();
@@ -940,6 +1002,15 @@ protected:
     void drawText(const Rect& screenCoords);
     void computeHtmlTextIntrinsicSize();
     void applyWhiteSpace();
+    void processCodeTags();
+    void cacheRectToWord();
+    void updateRectToWord(const std::vector<Rect>& glypsCoords);
+    void scheduleParentHtmlFlexLayout() {
+        if (m_positionType == PositionType::Absolute || !m_parent)
+            return;
+        if (m_parent->getDisplay() == DisplayType::Flex || m_parent->getDisplay() == DisplayType::InlineFlex)
+            m_parent->scheduleHtmlTask(PropUpdateSize);
+    }
 
     virtual void onTextChange(std::string_view text, std::string_view oldText);
     virtual void onFontChange(std::string_view font);
@@ -948,20 +1019,36 @@ protected:
 
     WrapOptions m_textWrapOptions;
     std::vector<Point> m_glyphsPositionsCache;
+    std::vector<Rect> m_glyphsCoordsCache;
 
     std::string m_text;
     std::string m_drawText;
     Fw::AlignmentFlag m_textAlign;
     Point m_textOffset;
+    std::string m_textOverflowCharacter;
 
     BitmapFontPtr m_font;
     std::vector<std::pair<int, Color>> m_textColors;
     std::vector<std::pair<int, Color>> m_drawTextColors;
+    Color m_baseTextColor{ Color::white };
 
     CoordsBufferPtr m_coordsBuffer;
     std::vector<std::pair<Color, CoordsBufferPtr>> m_colorCoordsBuffer;
+    std::vector<std::pair<Rect, std::string>> m_rectToWord;
+    std::vector<TextEvent> m_textEvents;
 
     float m_fontScale{ 1.f };
+
+    uint16_t m_textOverflowLength{ 0 };
+    CoordsBufferPtr m_textUnderline;
+    int m_strokeWidth{ 0 };
+    Color m_strokeColor{ Color::black };	
+
+    // Tracks the originally requested TTF font (base name) and size so we
+    // don't need to parse m_font->getName() when updating stroke.
+    std::string m_ttfFontPath;
+    std::string m_ttfBaseName;
+    int m_ttfFontSize{ 0 };
 
     const AtlasRegion* m_atlasRegion = nullptr;
 
@@ -1021,7 +1108,11 @@ public:
     }
     void setTextOnlyUpperCase(const bool textOnlyUpperCase) { setProp(PropTextOnlyUpperCase, textOnlyUpperCase); setText(m_text); }
     void setFont(std::string_view fontName);
+    void setTTFFont(std::string_view fontName, int fontSize = 12, int strokeWidth = 0, const Color& strokeColor = Color::black);
+    void setStroke(int strokeWidth, const Color& strokeColor = Color::black);
     void setFontScale(const float scale) { m_fontScale = scale; m_textCachedScreenCoords = {}; updateText(); }
+    void setTextOverflowLength(uint16_t length) { m_textOverflowLength = length; updateText(); }
+    void setTextOverflowCharacter(std::string character) { m_textOverflowCharacter = character; updateText(); }
     void setLineHeight(std::string height);
     const auto& getLineHeight() { return m_lineHeight; }
 
@@ -1032,6 +1123,8 @@ public:
     bool isTextWrap() { return hasProp(PropTextWrap); }
     std::string getFont();
     Size getTextSize() { return m_textSize; }
+    Size getRealTextSize() const { return m_realTextSize; }
+    std::string getTextByPos(const Point& mousePos);
 
     // custom style
 protected:

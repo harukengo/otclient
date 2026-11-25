@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -41,6 +41,7 @@ public:
 
     void play() override;
     void stop() override;
+    void setLooping(bool looping) override;
 
     bool isPlaying() override { return m_playing; }
 
@@ -60,7 +61,7 @@ private:
     SoundFilePtr m_soundFile;
     std::array<SoundBufferPtr, STREAM_FRAGMENTS> m_buffers;
     DownMix m_downMix;
-    bool m_looping{ false };
+    bool m_streamLooping{ false };
     bool m_playing{ false };
     bool m_eof{ false };
     bool m_waitingFile{ false };

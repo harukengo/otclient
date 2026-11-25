@@ -5,8 +5,7 @@
 </h1>
 
 [![Discord Shield](https://discordapp.com/api/guilds/888062548082061433/widget.png?style=shield)](https://discord.gg/tUjTBZzMCy)
-[![Build - Ubuntu](https://github.com/mehah/otclient/actions/workflows/build-ubuntu.yml/badge.svg)](https://github.com/mehah/otclient/actions/workflows/build-ubuntu.yml)
-[![Build - Windows](https://github.com/mehah/otclient/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mehah/otclient/actions/workflows/build-windows.yml)
+[![CI](https://github.com/opentibiabr/otclient/actions/workflows/ci.yml/badge.svg)](https://github.com/opentibiabr/otclient/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -23,6 +22,7 @@
 9. 💯 [Support Protocol](#support-protocol)
 10. ©️ [License](#license)
 11. ❤️ [Contributors](#contributors)
+12. 📦 [Client Assets Auto-Install](docs/client-assets-auto-install.md)
 
 ---
 
@@ -252,7 +252,7 @@ https://github.com/kokekanon/otclient.readme/assets/114332266/16aaa78b-fc55-4c6e
 ---
 
 ### 🔗 Compatibility & Protocols
-- Client **12.85 ~ 12.92**, **13.00 ~ 13.40** support *(protobuf)*  
+- Client **7.6 ~ 12.85 ~ 12.92**, **13.00 ~ 15.25** support *(protobuf)*  
 - Market rewritten (compatible with TFS and Canary)  
 - Async Texture Loading *(engine-level feature)*  
 - Supports sequenced packages and compression  
@@ -399,7 +399,7 @@ If it doesn't work, enable **curl**:
 - Blessing  
 - Screenshot  
 - Highscores  
-- Store *(compatible with 1098, 12.91 ~ 13.40)*  
+- Store *(compatible with 1098, 12.91 ~ 15.25)*  
 - QuickLoot  
 - Groups Vip  
 - Reward Wall *(Daily Rewards)*
@@ -486,6 +486,8 @@ If it doesn't work, enable **curl**:
 
 - **Full Cyclopedia** — ([@luanluciano93](https://github.com/luanluciano93), [@kokekanon](https://github.com/kokekanon), [@MUN1Z](https://github.com/MUN1Z), [@qatari](https://github.com/qatari))
 
+- **Wheel of Destiny** — (R!ck, ZLukSrT#8740, Christianlb, [@andreoam](https://github.com/andreoam), [@Libergod](https://github.com/libergod))
+
 #### 🔦 OTClient V8 (Features)
 - Lighting System  
 - Floor Fading  
@@ -507,13 +509,13 @@ This is a fork of edubart's OTClient. The objective of this fork is to develop a
 - [ ] Compile on Apple devices
 - [ ] Adapt the UI reusing the existing LUA code
 
-**Current compiling tutorials**
-- [Compiling for Android](https://github.com/mehah/otclient/wiki/Compiling-on-Android)
-
 ---
 
 ## <a id="compiling"></a>🔨 Compiling
 If you are interested in compiling this project, visit the **[Wiki](https://github.com/mehah/otclient/wiki)**.
+
+For content-addressed vcpkg reuse across CMake presets, Visual Studio Solutions,
+worktrees, and compatible forks, see the [shared build cache guide](docs/development/shared-build-cache.md).
 
 ---
 
@@ -565,12 +567,19 @@ Found a bug? Please create an issue in our **[bug tracker](https://github.com/me
 ## <a id="roadmap"></a>❤️ Roadmap
 | TO-DO list | Status | PR |
 |---|---|---|
-| wheel of destiny | ![](https://geps.dev/progress/10) | [#1311](https://github.com/mehah/otclient/pull/1311) |
-| Forge | ![](https://geps.dev/progress/1) | None |
-| Sound tibia 13 | ![](https://geps.dev/progress/80) | [#1098](https://github.com/mehah/otclient/pull/1098) |
-| Prey and tasks | ![](https://geps.dev/progress/0) | None |
-| compendium | ![](https://geps.dev/progress/0) | None |
-| Party List | ![](https://geps.dev/progress/0) | None |
+| 11.50 - Loot Container | ![](https://geps.dev/progress/0) | None |
+| 11.80 - Cyclopedia Map | ![](https://geps.dev/progress/0) | None |
+| 12.20 - Search Locker | ![](https://geps.dev/progress/0) | None |
+| 12.20 - Party List | ![](https://geps.dev/progress/0) | None |
+| 12.30 - Prey Hunt + Tracker | ![](https://geps.dev/progress/0) | None |
+| 12.90 - Podium System | ![](https://geps.dev/progress/0) | None |
+| 14.12 - Quickloot Keybind | ![](https://geps.dev/progress/0) | None |
+| 14.12 - Cyclopedia Magical Archive | ![](https://geps.dev/progress/5) | [#1676](https://github.com/opentibiabr/otclient/pull/1676) |
+| 15.00 - Aim At A Target | ![](https://geps.dev/progress/0) | None |
+| 15.12 - UI Map Conditions | ![](https://geps.dev/progress/0) | None |
+| 15.14 - Battle List Keybinds | ![](https://geps.dev/progress/0) | None |
+| 15.25 - Protocol Features | ![](https://geps.dev/progress/100) | [#1604](https://github.com/opentibiabr/otclient/pull/1604) |
+
 
 ---
 
@@ -583,9 +592,9 @@ Found a bug? Please create an issue in our **[bug tracker](https://github.com/me
 | TFS 1.5 (8.0 / 8.60) | Downgrade nekiro / MillhioreBT | [force-new-walking-formula: true](https://github.com/mehah/otclient/blob/cf7badda978de88cb3724615688e3d9da2ff4207/data/setup.otml#L21) • [item-ticks-per-frame: 500](https://github.com/mehah/otclient/blob/cf7badda978de88cb3724615688e3d9da2ff4207/data/setup.otml#L32) | ✅ |
 | TFS 1.4.2 (10.98) | Release Otland |  | ✅ |
 | TFS 1.6 (13.10) | Main repo otland (2024) | [See wiki](https://github.com/mehah/otclient/wiki/Tutorial-to-Use-OTC-in-TFS-main) | ✅ |
-| Canary (13.21 / 13.32 / 13.40) | OpenTibiaBr | [See Wiki](https://docs.opentibiabr.com/opentibiabr/projects/otclient-redemption/about#how-to-connect-on-canary-with-otclient-redemption) | ✅ |
-| Canary (14.00 ~ 14.12) | OpenTibiaBr | [See Wiki](https://docs.opentibiabr.com/opentibiabr/projects/otclient-redemption/about#how-to-connect-on-canary-with-otclient-redemption) | ✅ |
-| Canary (15.00 ~ 15.10) | OpenTibiaBr | [See Wiki](https://docs.opentibiabr.com/opentibiabr/projects/otclient-redemption/about#how-to-connect-on-canary-with-otclient-redemption) | ❌ |
+| Canary (13.21 / 13.32 / 13.40) | OpenTibiaBr | [See Wiki](https://github.com/opentibiabr/otclient/wiki/Tutorial-to-use-OTC-in-Canary-main) | ✅ |
+| Canary (14.00 ~ 14.12) | OpenTibiaBr | [See Wiki](https://github.com/opentibiabr/otclient/wiki/Tutorial-to-use-OTC-in-Canary-main) | ✅ |
+| Canary (15.00 ~ 15.25) | OpenTibiaBr | [See Wiki](https://github.com/opentibiabr/otclient/wiki/Tutorial-to-use-OTC-in-Canary-main) | ✅ |
 
 ---
 

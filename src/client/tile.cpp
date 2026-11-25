@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,7 @@
 #include "tile.h"
 
 #include "client.h"
+#include "client/const.h"
 #include "localplayer.h"
 #include "effect.h"
 #include "game.h"
@@ -66,7 +67,7 @@ void drawThing(const ThingPtr& thing, const Point& dest, const int flags, uint8_
     }
 }
 
-void Tile::draw(const Point& dest, const int flags, LightView* lightView)
+void Tile::draw(const MapPosInfo& mapRect, const Point& dest, const int flags, LightView* lightView)
 {
     m_lastDrawDest = dest;
 
@@ -78,13 +79,48 @@ void Tile::draw(const Point& dest, const int flags, LightView* lightView)
     }
 
     for (const auto& thing : m_things) {
-        if (!thing->isGround() && !thing->isGroundBorder() && !thing->isOnBottom())
+        if (!thing->isGround() && !thing->isGroundBorder())
             break;
 
         drawThing(thing, dest, flags, drawElevation);
     }
 
-    drawAttachedEffect(dest, lightView, false);
+    // when walking diagonally over a tile that has a non-walkable object on it (for example - a tree) the creature should be drawn behind it
+    if (hasWalkingCreature()) {
+        g_drawPool.setDrawOrder(DrawOrder::THIRD);
+        for (const auto& creature : m_walkingCreatures) {
+            if (creature->getDirection() == Otc::Direction::NorthEast || creature->getDirection() == Otc::Direction::SouthWest) {
+                // if creature is stepping into this tile then draw it later
+                if (creature->getLastStepToPosition() == getPosition())
+                    continue;
+
+                const auto& cDest = Point(
+                    dest.x + ((creature->getPosition().x - m_position.x) * g_gameConfig.getSpriteSize() - creature->getDrawElevation()) * g_drawPool.getScaleFactor(),
+                    dest.y + ((creature->getPosition().y - m_position.y) * g_gameConfig.getSpriteSize() - creature->getDrawElevation()) * g_drawPool.getScaleFactor()
+                );
+
+                if (flags == Otc::DrawLights)
+                    creature->drawLight(cDest, lightView);
+                else {
+                    creature->draw(cDest, flags & Otc::DrawThings);
+                    creature->drawInformation(mapRect, cDest + creature->getDrawElevation() * g_drawPool.getScaleFactor(), flags);
+                }
+            }
+        }
+        g_drawPool.resetDrawOrder();
+    }
+
+    for (const auto& thing : m_things) {
+        if (thing->isGround() || thing->isGroundBorder())
+            continue;
+        if (!thing->isOnBottom())
+            break;
+
+        drawThing(thing, dest, flags, drawElevation);
+    }
+
+
+    drawAttachedEffect(dest, dest, lightView, false);
 
     if (hasCommonItem()) {
         for (auto& item : std::ranges::reverse_view(m_things)) {
@@ -96,18 +132,18 @@ void Tile::draw(const Point& dest, const int flags, LightView* lightView)
     // after we render 2x2 lying corpses, we must redraw previous creatures/ontop above them
     if (m_tilesRedraw) {
         for (const auto& tile : *m_tilesRedraw) {
-            tile->drawCreature(tile->m_lastDrawDest, flags, true, drawElevation);
+            tile->drawCreature(mapRect, tile->m_lastDrawDest, flags, true, drawElevation);
             tile->drawTop(tile->m_lastDrawDest, flags, true, drawElevation);
         }
     }
 
-    drawCreature(dest, flags, false, drawElevation);
+    drawCreature(mapRect, dest, flags, false, drawElevation);
     drawTop(dest, flags, false, drawElevation);
-    drawAttachedEffect(dest, lightView, true);
+    drawAttachedEffect(dest, dest, lightView, true);
     drawAttachedParticlesEffect(dest);
 }
 
-void Tile::drawLight(const Point& dest, LightView* lightView) {
+void Tile::drawLight(const MapPosInfo& mapRect, const Point& dest, LightView* lightView) {
     uint8_t drawElevation = 0;
 
     for (const auto& thing : m_things) {
@@ -117,7 +153,7 @@ void Tile::drawLight(const Point& dest, LightView* lightView) {
         updateElevation(thing, drawElevation);
     }
 
-    drawCreature(dest, Otc::DrawLights, true, drawElevation, lightView);
+    drawCreature(mapRect, dest, Otc::DrawLights, true, drawElevation, lightView);
 
     if (m_effects) {
         for (const auto& effect : *m_effects)
@@ -127,12 +163,10 @@ void Tile::drawLight(const Point& dest, LightView* lightView) {
     drawAttachedLightEffect(dest, lightView);
 }
 
-void Tile::drawCreature(const Point& dest, const int flags, const bool forceDraw, uint8_t drawElevation, LightView* lightView)
+void Tile::drawCreature(const MapPosInfo& mapRect, const Point& dest, const int flags, const bool forceDraw, uint8_t drawElevation, LightView* lightView)
 {
     if (!forceDraw && !m_drawTopAndCreature)
         return;
-
-    const auto& newDest = dest - drawElevation * g_drawPool.getScaleFactor();
 
     bool localPlayerDrawed = false;
     if (hasCreatures()) {
@@ -145,11 +179,17 @@ void Tile::drawCreature(const Point& dest, const int flags, const bool forceDraw
             }
 
             drawThing(thing, dest, flags, drawElevation, lightView);
+            static_cast<Creature*>(thing.get())->drawInformation(mapRect, dest, flags);
         }
     }
 
     g_drawPool.setDrawOrder(DrawOrder::THIRD);
     for (const auto& creature : m_walkingCreatures) {
+        // already drawn by this point
+        if (creature->getDirection() == Otc::Direction::NorthEast || creature->getDirection() == Otc::Direction::SouthWest)
+            if (creature->getLastStepToPosition() != getPosition())
+                continue;
+
         const auto& cDest = Point(
             dest.x + ((creature->getPosition().x - m_position.x) * g_gameConfig.getSpriteSize() - creature->getDrawElevation()) * g_drawPool.getScaleFactor(),
             dest.y + ((creature->getPosition().y - m_position.y) * g_gameConfig.getSpriteSize() - creature->getDrawElevation()) * g_drawPool.getScaleFactor()
@@ -157,8 +197,10 @@ void Tile::drawCreature(const Point& dest, const int flags, const bool forceDraw
 
         if (flags == Otc::DrawLights)
             creature->drawLight(cDest, lightView);
-        else
+        else {
             creature->draw(cDest, flags & Otc::DrawThings);
+            creature->drawInformation(mapRect, cDest + creature->getDrawElevation() * g_drawPool.getScaleFactor(), flags);
+        }
     }
     g_drawPool.resetDrawOrder();
 
@@ -484,6 +526,14 @@ ThingPtr Tile::getTopThing()
 
 bool Tile::hasGround() { return (getGround() && getGround()->isSingleGround()) || m_thingTypeFlag & HAS_GROUND_BORDER; };
 bool Tile::hasTopGround(const bool ignoreBorder) { return (getGround() && getGround()->isTopGround()) || (!ignoreBorder && m_thingTypeFlag & HAS_TOP_GROUND_BORDER); }
+bool Tile::hasFloorChange() const
+{
+    for (const auto& thing : m_things) {
+        if (thing->hasFloorChange())
+            return true;
+    }
+    return false;
+}
 ItemPtr Tile::getGround() { const auto& ground = getThing(0); return ground && ground->isGround() ? ground->static_self_cast<Item>() : nullptr; }
 
 std::vector<ItemPtr> Tile::getItems()
@@ -648,7 +698,7 @@ ThingPtr Tile::getTopMultiUseThing()
     }
 
     for (const auto& thing : m_things) {
-        if (!thing->isGround() && !thing->isGroundBorder() && !thing->isOnTop())
+        if (!thing->isGround() && !thing->isOnTop())
             return thing;
     }
 

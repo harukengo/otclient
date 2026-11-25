@@ -21,6 +21,14 @@ function(otclient_add_gtest TARGET_NAME)
             GTest::gtest_main
     )
 
+    if(ANDROID)
+        target_link_libraries(${TARGET_NAME}
+            PRIVATE
+                log
+                c
+        )
+    endif()
+
     target_compile_definitions(${TARGET_NAME}
         PRIVATE
             CLIENT
@@ -29,6 +37,16 @@ function(otclient_add_gtest TARGET_NAME)
             FRAMEWORK_SOUND
             FRAMEWORK_XML
     )
+
+    if(ASAN_ENABLED)
+        if(MSVC)
+            target_compile_options(${TARGET_NAME} PRIVATE /fsanitize=address)
+            target_link_options(${TARGET_NAME} PRIVATE /fsanitize=address)
+        else()
+            target_compile_options(${TARGET_NAME} PRIVATE -fsanitize=address)
+            target_link_options(${TARGET_NAME} PRIVATE -fsanitize=address)
+        endif()
+    endif()
 
     if(MSVC)
         target_compile_options(${TARGET_NAME} PRIVATE /utf-8)
@@ -44,3 +62,5 @@ endfunction()
 
 add_subdirectory(map)
 add_subdirectory(stdext)
+add_subdirectory(otml)
+add_subdirectory(ui)

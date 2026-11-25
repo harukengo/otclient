@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,12 +22,16 @@
 
 #include "uimap.h"
 
+#include "framework/graphics/declarations.h"
+#include "gameconfig.h"
 #include "lightview.h"
 #include "map.h"
 #include "mapview.h"
+#include "framework/ui/uimanager.h"
 #include "framework/graphics/drawpoolmanager.h"
 #include "framework/otml/otmlnode.h"
 #include <framework/platform/platformwindow.h>
+#include <framework/input/mouse.h>
 
 UIMap::UIMap()
 {
@@ -52,20 +56,26 @@ UIMap::~UIMap()
 void UIMap::draw(const DrawPoolType drawPane) {
     if (drawPane == DrawPoolType::MAP) {
         g_drawPool.preDraw(drawPane, [this] {
-            m_mapView->drawFloor();
+            m_mapView->drawFloor(isHovered() || g_ui.isMouseGrabbed());
         }, [this] {
             m_mapView->registerEvents();
-        }, m_mapView->m_posInfo.rect, m_mapView->m_posInfo.srcRect, Color::black);
+        }, m_mapView->m_posInfo.rect, m_mapView->m_posInfo.srcRect,
+           m_mapView->getCameraPosition().z == g_gameConfig.getMapSeaFloor() ? Color(0xFFA54C27U) : Color::black);
+
+        g_drawPool.preDraw(DrawPoolType::CREATURE_INFORMATION, [] {});
     } else if (drawPane == DrawPoolType::LIGHT) {
         g_drawPool.preDraw(drawPane, [this] {
             m_mapView->m_lightView->clear();
             m_mapView->drawLights();
             m_mapView->m_lightView->draw(m_mapView->m_posInfo.rect, m_mapView->m_posInfo.srcRect);
-        }, true);
-    } else if (drawPane == DrawPoolType::CREATURE_INFORMATION) {
-        g_drawPool.preDraw(drawPane, [this] {
-            m_mapView->drawCreatureInformation();
         });
+    } else if (drawPane == DrawPoolType::CREATURE_INFORMATION) {
+        // FIXME: disabled multithreading of creature information drawing (instead draw it at the same time as MAP)
+        // due to an unknown reason creature information of other creatures are noticeably flickering when player is moving
+        //
+        // g_drawPool.preDraw(drawPane, [this] {
+        //     m_mapView->drawCreatureInformation();
+        // });
     } else if (drawPane == DrawPoolType::FOREGROUND_MAP) {
         g_drawPool.preDraw(drawPane, [this] {
             m_mapView->drawForeground(m_mapviewRect);
@@ -87,6 +97,8 @@ void UIMap::drawSelf(const DrawPoolType drawPane)
 
 void UIMap::updateMapRect() {
     m_mapView->updateRect(m_mapviewRect);
+    if (isHovered() && m_mapView->getLastMousePosition().isValid())
+        m_mapView->updateMouseCursor(m_mapView->getLastMousePosition());
 }
 
 // ----------------- moved from header: bodies that access m_mapView -----------------
@@ -113,11 +125,15 @@ void UIMap::setLimitVisibleDimension(const bool enable) { m_mapView->setLimitVis
 
 void UIMap::setDrawManaBar(const bool enable) { m_mapView->setDrawManaBar(enable); }
 
+void UIMap::setDrawHarmony(const bool enable) { m_mapView->setDrawHarmony(enable); }
+
 void UIMap::setShader(std::string_view name, float fadein, float fadeout) { m_mapView->setShader(name, fadein, fadeout); }
 
 void UIMap::setMinimumAmbientLight(const float intensity) { m_mapView->setMinimumAmbientLight(intensity); }
 
 void UIMap::setDrawViewportEdge(const bool force) { m_mapView->m_forceDrawViewportEdge = force; m_mapView->m_visibleDimension = {}; updateVisibleDimension(); }
+
+bool UIMap::isDrawingViewportEdge() { return m_mapView->isDrawingViewportEdge(); }
 
 bool UIMap::isDrawingNames() { return m_mapView->isDrawingNames(); }
 
@@ -149,6 +165,31 @@ CreaturePtr UIMap::getFollowingCreature() { return m_mapView->getFollowingCreatu
 
 Position UIMap::getCameraPosition() { return m_mapView->getCameraPosition(); }
 
+Point UIMap::getTilePoint(const Position& pos)
+{
+    if (!pos.isMapPosition() || !m_mapView || !m_mapView->isInRange(pos))
+        return {};
+
+    auto point = m_mapView->transformPositionTo2D(pos) - m_mapView->m_posInfo.drawOffset;
+    point.x *= m_mapView->m_posInfo.horizontalStretchFactor;
+    point.y *= m_mapView->m_posInfo.verticalStretchFactor;
+    point += m_mapviewRect.topLeft();
+    point /= g_window.getDisplayDensity();
+    return point;
+}
+
+Rect UIMap::getTileRect(const Position& pos)
+{
+    if (!pos.isMapPosition() || !m_mapView || !m_mapView->isInRange(pos))
+        return {};
+
+    const auto point = getTilePoint(pos);
+    const auto density = g_window.getDisplayDensity();
+    const auto width = std::max<int>(1, std::lround(static_cast<float>(m_mapView->m_tileSize) * m_mapView->m_posInfo.horizontalStretchFactor / density));
+    const auto height = std::max<int>(1, std::lround(static_cast<float>(m_mapView->m_tileSize) * m_mapView->m_posInfo.verticalStretchFactor / density));
+    return { point.x, point.y, width, height };
+}
+
 Position UIMap::getPosition(const Point& mousePos) { return m_mapView->getPosition(mousePos); }
 
 TilePtr UIMap::getTile(const Point& mousePos) { return m_mapView->getTopTile(getPosition(mousePos)); }
@@ -160,6 +201,8 @@ float UIMap::getMinimumAmbientLight() { return m_mapView->getMinimumAmbientLight
 void UIMap::setCrosshairTexture(const std::string& texturePath) { m_mapView->setCrosshairTexture(texturePath); }
 
 void UIMap::setDrawHighlightTarget(const bool enable) { m_mapView->setDrawHighlightTarget(enable); }
+
+void UIMap::setCursorAnimations(const bool enable) { m_mapView->setCursorAnimations(enable); }
 
 void UIMap::setAntiAliasingMode(const Otc::AntialiasingMode mode) { m_mapView->setAntiAliasingMode(mode); }
 
@@ -249,15 +292,47 @@ void UIMap::onGeometryChange(const Rect& oldRect, const Rect& newRect)
     updateMapSize();
 }
 
+void UIMap::resetCursorToDefault()
+{
+    if (m_mapView->hasCursorAnimations() && !g_mouse.isCursorChanged()) {
+        const int defaultId = g_mouse.getCursorId("default");
+        if (defaultId != -1)
+            g_window.setMouseCursor(defaultId);
+        else
+            g_window.restoreMouseCursor();
+    }
+}
+
+void UIMap::onHoverChange(bool hovered)
+{
+    UIWidget::onHoverChange(hovered);
+    if (!hovered) {
+        resetCursorToDefault();
+    } else {
+        const auto mousePosition = getPosition(g_window.getMousePosition());
+        if (mousePosition.isValid()) {
+            m_mapView->onMouseMove(mousePosition);
+            m_mapView->setLastMousePosition(mousePosition);
+            m_mapView->updateMouseCursor(mousePosition);
+        }
+    }
+}
+
 bool UIMap::onMouseMove(const Point& mousePos, const Point& mouseMoved)
 {
     const auto& pos = getPosition(mousePos);
-    if (!pos.isValid())
+    if (!pos.isValid()) {
+        if (isHovered())
+            resetCursorToDefault();
         return false;
+    }
 
-    if (m_mapView->getLastMousePosition() != pos) {
+    if (isHovered() && m_mapView->getLastMousePosition() != pos) {
         m_mapView->onMouseMove(pos);
         m_mapView->setLastMousePosition(pos);
+        m_mapView->updateMouseCursor(pos);
+    } else if (isHovered()) {
+        m_mapView->updateMouseCursor(pos);
     }
 
     return UIWidget::onMouseMove(mousePos, mouseMoved);

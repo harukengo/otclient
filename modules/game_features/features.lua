@@ -4,6 +4,7 @@ controller:registerEvents(g_game, {
         -- g_game.enableFeature(GameKeepUnawareTiles)
         -- g_game.enableFeature(GameNegativeOffset)
         -- g_game.enableFeature(GameWingsAurasEffectsShader)
+        -- g_game.enableFeature(GameCreaturePaperdoll)
         -- g_game.enableFeature(GameAllowCustomBotScripts)
 
         g_game.enableFeature(GameFormatCreatureName)
@@ -96,6 +97,10 @@ controller:registerEvents(g_game, {
 
         if version >= 963 then
             g_game.enableFeature(GameAdditionalVipInfo)
+        end
+
+        if version >= 972 then
+            g_game.enableFeature(GameDoublePlayerGoodsMoney)
         end
 
         if version >= 980 then
@@ -214,6 +219,7 @@ controller:registerEvents(g_game, {
             g_game.enableFeature(GamePlayerFamiliars)
             g_game.disableFeature(GameEnvironmentEffect)
             g_game.disableFeature(GameItemAnimationPhase)
+            g_game.enableFeature(GameManaShield)
         end
 
         if version >= 1290 then
@@ -261,5 +267,31 @@ controller:registerEvents(g_game, {
             g_game.disableFeature(GameForgeSkillStats)
             g_game.enableFeature(GameCharacterSkillStats)
         end
+
+        if version >= 1500 then
+            g_game.enableFeature(GameVocationMonk)
+        end
+
+        if version >= 1510 then
+            g_game.enableFeature(GameProficiency)
+        end
+
+        if version >= 1513 then
+            g_game.enableFeature(GameNpcWindowRedesign)
+        end
+
+        if version >= 1514 then
+            g_game.enableFeature(GameEffectSource)
+        end
+
+        if version >= 1520 then
+            g_game.enableFeature(GameLevelPercentU16)
+            g_game.enableFeature(GameTaskboard)
+        end
+
+        if version >= 1525 then
+            g_game.enableFeature(GameTacticsWithoutFightMode)
+        end
+        
     end
 })

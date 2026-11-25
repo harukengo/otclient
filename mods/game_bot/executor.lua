@@ -139,6 +139,7 @@ function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, relo
     openUrl = g_platform.openUrl,
     openDir = g_platform.openDir,
   }
+  context.g_clock = g_clock
 
   context.Item = Item
   context.Creature = Creature
@@ -151,6 +152,7 @@ function executeBot(config, storage, tabs, msgCallback, saveConfigCallback, relo
   context.HTTP = HTTP
   context.OutputMessage = OutputMessage
   context.modules = modules
+  context.Directions = Directions
 
   -- log functions
   context.info = function(text) return msgCallback("info", tostring(text)) end

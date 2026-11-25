@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,11 +26,14 @@
 
 #include "animatedtext.h"
 #include "creature.h"
+#include "game.h"
 #include "gameconfig.h"
 #include "lightview.h"
 #include "map.h"
 #include "missile.h"
 #include "tile.h"
+#include "item.h"
+#include <framework/input/mouse.h>
 #include "framework/core/asyncdispatcher.h"
 #include "framework/core/eventdispatcher.h"
 #include <framework/core/graphicalapplication.h>
@@ -43,7 +46,7 @@
 MapView::MapView() : m_lightView(std::make_unique<LightView>(Size())), m_pool(g_drawPool.get(DrawPoolType::MAP))
 {
     m_floors.resize(g_gameConfig.getMapMaxZ() + 1);
-    m_floorThreads.resize(g_asyncDispatcher.get_thread_count());
+    m_floorThreads.resize(g_asyncDispatcher->get_thread_count());
     for (auto& thread : m_floorThreads)
         thread.resize(m_floors.size());
 
@@ -118,11 +121,36 @@ void MapView::preLoad() {
     g_map.updateAttachedWidgets(static_self_cast<MapView>());
 }
 
-void MapView::drawFloor()
+void MapView::drawFloor(const bool updateHover)
 {
     const auto& cameraPosition = m_posInfo.camera;
+    const auto mousePoint = g_window.getMousePosition();
+    const bool mouseInsideMap = m_posInfo.rect.contains(mousePoint * g_window.getDisplayDensity());
 
-    const uint32_t flags = Otc::DrawThings;
+    if (mouseInsideMap) {
+        const auto mousePosition = getPosition(mousePoint);
+        if (m_crosshairTexture)
+            m_mousePosition = mousePosition;
+
+        if (updateHover && (!m_highlightUpdatesEnabled || mousePosition != m_highlightMousePosition)) {
+            destroyHighlightTile();
+            updateHighlightTile(mousePosition);
+        } else if (!updateHover && (m_lastHighlightTile || m_highlightMousePosition.isValid())) {
+            destroyHighlightTile();
+        }
+        m_highlightUpdatesEnabled = updateHover;
+    } else {
+        m_mousePosition = {};
+        if (m_lastHighlightTile || m_highlightMousePosition.isValid())
+            destroyHighlightTile();
+        m_highlightUpdatesEnabled = false;
+    }
+
+    uint32_t flags = Otc::DrawThings;
+    if (m_drawNames) { flags |= Otc::DrawNames; }
+    if (m_drawHealthBars) { flags |= Otc::DrawBars; }
+    if (m_drawManaBar) { flags |= Otc::DrawManaBar; }
+    if (m_drawHarmony) { flags |= Otc::DrawHarmony; }
 
     for (int_fast8_t z = m_floorMax; z >= m_floorMin; --z) {
         const float fadeLevel = getFadeLevel(z);
@@ -134,6 +162,7 @@ void MapView::drawFloor()
         const bool alwaysTransparent = m_floorViewMode == Otc::ALWAYS_WITH_TRANSPARENCY && z < m_cachedFirstVisibleFloor && _camera.coveredUp(cameraPosition.z - z);
 
         const auto& map = m_floors[z].cachedVisibleTiles;
+        std::vector<std::pair<TilePtr, uint32_t>> walking_tiles;
 
         for (const auto& tile : map.tiles) {
             uint32_t tileFlags = flags;
@@ -141,15 +170,44 @@ void MapView::drawFloor()
             if (!m_drawViewportEdge && !tile->canRender(tileFlags, cameraPosition, m_viewport))
                 continue;
 
-            if (alwaysTransparent) {
-                const bool inRange = tile->getPosition().isInRange(_camera, g_gameConfig.getTileTransparentFloorViewRange(), g_gameConfig.getTileTransparentFloorViewRange(), true);
-                g_drawPool.setOpacity(inRange ? .16 : .7);
+            walking_tiles.emplace_back(tile, tileFlags);
+
+            // if this tile is the edge or if upper right tile doesn't have walking creatures
+            // -> draw it and all walking_tiles depending on it (if there are any queued up)
+            TilePtr upper_right_tile = g_map.getTile(tile->getPosition().translated(1, -1, 0));
+            if (!upper_right_tile || !upper_right_tile->hasWalkingCreature()) {
+                for (int i = walking_tiles.size() - 1; i >= 0; i--) {
+                    const auto& [tile, tileFlags] = walking_tiles[i];
+
+                    if (alwaysTransparent) {
+                        const bool inRange = tile->getPosition().isInRange(_camera, g_gameConfig.getTileTransparentFloorViewRange(), g_gameConfig.getTileTransparentFloorViewRange(), true);
+                        g_drawPool.setOpacity(inRange ? .16 : .7);
+                    }
+
+                    tile->draw(m_posInfo, transformPositionTo2D(tile->getPosition()), tileFlags);
+
+                    if (alwaysTransparent)
+                        g_drawPool.resetOpacity();
+                }
+                walking_tiles.clear();
             }
+        }
 
-            tile->draw(transformPositionTo2D(tile->getPosition()), tileFlags);
+        if (!walking_tiles.empty()) {
+            for (int i = walking_tiles.size() - 1; i >= 0; i--) {
+                const auto& [tile, tileFlags] = walking_tiles[i];
 
-            if (alwaysTransparent)
-                g_drawPool.resetOpacity();
+                if (alwaysTransparent) {
+                    const bool inRange = tile->getPosition().isInRange(_camera, g_gameConfig.getTileTransparentFloorViewRange(), g_gameConfig.getTileTransparentFloorViewRange(), true);
+                    g_drawPool.setOpacity(inRange ? .16 : .7);
+                }
+
+                tile->draw(m_posInfo, transformPositionTo2D(tile->getPosition()), tileFlags);
+
+                if (alwaysTransparent)
+                    g_drawPool.resetOpacity();
+            }
+            walking_tiles.clear();
         }
 
         for (const auto& missile : g_map.getFloorMissiles(z))
@@ -168,15 +226,12 @@ void MapView::drawFloor()
         g_drawPool.flush();
     }
 
-    if (m_posInfo.rect.contains(g_window.getMousePosition() * g_window.getDisplayDensity())) {
+    if (mouseInsideMap) {
         if (m_crosshairTexture && m_mousePosition.isValid()) {
             const auto& point = transformPositionTo2D(m_mousePosition);
             const auto& crosshairRect = Rect(point, m_tileSize, m_tileSize);
             g_drawPool.addTexturedRect(crosshairRect, m_crosshairTexture);
         }
-    } else if (m_lastHighlightTile) {
-        m_mousePosition = {}; // Invalidate mousePosition
-        destroyHighlightTile();
     }
 }
 
@@ -202,7 +257,7 @@ void MapView::drawLights() {
         }
 
         for (const auto& tile : map.tiles)
-            tile->drawLight(transformPositionTo2D(tile->getPosition()), m_lightView.get());
+            tile->drawLight(m_posInfo, transformPositionTo2D(tile->getPosition()), m_lightView.get());
 
         for (const auto& missile : g_map.getFloorMissiles(z))
             missile->draw(transformPositionTo2D(missile->getPosition()), false, m_lightView.get());
@@ -216,6 +271,7 @@ void MapView::drawCreatureInformation() {
     if (m_drawNames) { flags |= Otc::DrawNames; }
     if (m_drawHealthBars) { flags |= Otc::DrawBars; }
     if (m_drawManaBar) { flags |= Otc::DrawManaBar; }
+    if (m_drawHarmony) { flags |= Otc::DrawHarmony; }
 
     Position _camera = m_posInfo.camera;
     const bool alwaysTransparent = m_floorViewMode == Otc::ALWAYS_WITH_TRANSPARENCY && _camera.coveredUp(m_posInfo.camera.z - m_floorMin);
@@ -289,9 +345,13 @@ void MapView::updateVisibleTiles()
         return;
 
     // clear current visible tiles cache
-    do {
-        m_floors[m_floorMin].cachedVisibleTiles.clear();
-    } while (++m_floorMin <= m_floorMax);
+    for (uint8_t z = m_floorMin; z <= m_floorMax; ++z)
+        m_floors[z].cachedVisibleTiles.clear();
+
+    // empty range, recomputed below. m_floorMin must never be used as the loop
+    // counter itself: when no tile is added and the camera does not move, nothing
+    // restores it and it walks past the end of m_floors.
+    m_floorMin = m_floorMax + 1;
 
     m_lockedFirstVisibleFloor = m_floorViewMode == Otc::LOCKED ? m_posInfo.camera.z : -1;
 
@@ -387,7 +447,7 @@ void MapView::updateVisibleTiles()
     };
 
     if (m_multithreading) {
-        static const int numThreads = g_asyncDispatcher.get_thread_count();
+        static const int numThreads = g_asyncDispatcher->get_thread_count();
         static BS::multi_future<void> tasks(numThreads);
         tasks.clear();
 
@@ -400,7 +460,7 @@ void MapView::updateVisibleTiles()
             for (auto& floor : m_floorThreads[i])
                 floor.cachedVisibleTiles.clear();
 
-            tasks.emplace_back(g_asyncDispatcher.submit_task([=, this] {
+            tasks.emplace_back(g_asyncDispatcher->submit_task([=, this] {
                 processDiagonalRange(m_floorThreads[i], start, end);
             }));
         }
@@ -442,7 +502,7 @@ void MapView::updateRect(const Rect& rect) {
         m_posInfo.horizontalStretchFactor = rect.width() / static_cast<float>(m_posInfo.srcRect.width());
         m_posInfo.verticalStretchFactor = rect.height() / static_cast<float>(m_posInfo.srcRect.height());
 
-        const auto& mousePos = getPosition(g_window.getMousePosition() * g_window.getDisplayDensity());
+        const auto& mousePos = getPosition(g_window.getMousePosition());
         if (mousePos != m_mousePosition)
             onMouseMove(m_mousePosition = mousePos, true);
     }
@@ -557,9 +617,79 @@ void MapView::onFadeInFinished()
 // so the onMouseMove event is triggered by sending the new tile position that the mouse is in.
 void MapView::onMouseMove(const Position& mousePos, const bool /*isVirtualMove*/)
 {
-    { // Highlight Target System
-        destroyHighlightTile();
-        updateHighlightTile(mousePos);
+    destroyHighlightTile();
+    updateHighlightTile(mousePos);
+}
+
+void MapView::updateMouseCursor(const Position& mousePos)
+{
+    if (!g_mouse.isCursorChanged()) {
+        bool cursorSet = false;
+        if (m_cursorAnimations) {
+            if (const auto& tile = getTopTile(mousePos)) {
+                if (const auto& creature = tile->getTopCreature()) {
+                    if (creature->isMonster()) {
+                        int id = g_mouse.getCursorId("attack");
+                        if (id != -1) {
+                            g_window.setMouseCursor(id);
+                            cursorSet = true;
+                        }
+                    } else if (creature->isNpc()) {
+                        int id = g_mouse.getCursorId("talk");
+                        if (id != -1) {
+                            g_window.setMouseCursor(id);
+                            cursorSet = true;
+                        }
+                    }
+                }
+                
+                if (!cursorSet) {
+                    if (const auto& thing = tile->getTopUseThing()) {
+                        // Check for both containers and corpses (corpses might not always be containers)
+                        if (thing->isContainer() || thing->isLyingCorpse()) {
+                            // Use quicklootcursor for dead creatures when quickloot is active
+                            const bool isDeadCreature = thing->isLyingCorpse();
+                            const bool quickLootActive = g_game.getFeature(Otc::GameThingQuickLoot);
+                            const char* cursorName = (isDeadCreature && quickLootActive) ? "quicklootcursor" : "containercursor";
+                            
+                            int id = g_mouse.getCursorId(cursorName);
+                            if (id != -1) {
+                                g_window.setMouseCursor(id);
+                                cursorSet = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!cursorSet) {
+                    if (const auto& thing = tile->getTopUseThing()) {
+                        if (thing->isUsable()) {
+                            int id = g_mouse.getCursorId("pointinghand");
+                            if (id != -1) {
+                                g_window.setMouseCursor(id);
+                                cursorSet = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!cursorSet && tile->isWalkable()) {
+                    int id = g_mouse.getCursorId("walk");
+                    if (id != -1) {
+                        g_window.setMouseCursor(id);
+                        cursorSet = true;
+                    }
+                }
+            }
+        }
+
+        if (!cursorSet) {
+            int id = g_mouse.getCursorId("default");
+            if (id != -1)
+                g_window.setMouseCursor(id);
+            else
+                g_window.restoreMouseCursor();
+        }
     }
 }
 
@@ -568,7 +698,7 @@ void MapView::onKeyRelease(const InputEvent& inputEvent)
     const bool shiftPressed = inputEvent.keyboardModifiers & Fw::KeyboardShiftModifier;
     if (shiftPressed != m_shiftPressed) {
         m_shiftPressed = shiftPressed;
-        onMouseMove(m_mousePosition);
+        destroyHighlightTile();
     }
 }
 
@@ -891,44 +1021,15 @@ void MapView::setDrawLights(const bool enable)
 
 void MapView::updateViewportDirectionCache()
 {
+    const auto halfWidth = static_cast<uint8_t>(std::min<int>(m_drawDimension.width() / 2, 254));
+    const auto halfHeight = static_cast<uint8_t>(std::min<int>(m_drawDimension.height() / 2, 254));
+
     for (uint8_t dir = Otc::North; dir <= Otc::InvalidDirection; ++dir) {
         auto& vp = m_viewPortDirection[dir];
-        vp.top = m_posInfo.awareRange.top;
-        vp.right = m_posInfo.awareRange.right;
-        vp.bottom = vp.top;
-        vp.left = vp.right;
-
-        switch (dir) {
-            case Otc::North:
-            case Otc::South:
-                vp.top += 1;
-                vp.bottom += 1;
-                break;
-
-            case Otc::West:
-            case Otc::East:
-                vp.right += 1;
-                vp.left += 1;
-                break;
-
-            case Otc::NorthEast:
-            case Otc::SouthEast:
-            case Otc::NorthWest:
-            case Otc::SouthWest:
-                vp.left += 1;
-                vp.bottom += 1;
-                vp.top += 1;
-                vp.right += 1;
-                break;
-
-            case Otc::InvalidDirection:
-                vp.left -= 1;
-                vp.right -= 1;
-                break;
-
-            default:
-                break;
-        }
+        vp.left = halfWidth;
+        vp.top = halfHeight;
+        vp.right = static_cast<uint8_t>(halfWidth + 1);
+        vp.bottom = static_cast<uint8_t>(halfHeight + 1);
     }
 }
 
@@ -949,6 +1050,7 @@ void MapView::setCrosshairTexture(const std::string& texturePath)
 }
 
 void MapView::updateHighlightTile(const Position& mousePos) {
+    m_highlightMousePosition = mousePos;
     if (m_drawHighlightTarget) {
         if ((m_lastHighlightTile = (m_shiftPressed ? getTopTile(mousePos) : g_map.getTile(mousePos))))
             m_lastHighlightTile->select(m_shiftPressed ? TileSelectType::NO_FILTERED : TileSelectType::FILTERED);
@@ -960,6 +1062,7 @@ void MapView::destroyHighlightTile() {
         m_lastHighlightTile->unselect();
         m_lastHighlightTile = nullptr;
     }
+    m_highlightMousePosition = {};
 }
 
 void MapView::addForegroundTile(const TilePtr& tile) {

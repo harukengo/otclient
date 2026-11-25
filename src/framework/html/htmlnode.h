@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+* Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +34,8 @@ struct StyleValue
     std::string value;
     std::string inheritedFromId;
     bool important{ false };
+    // Set by the universal selector (*): weakest value, replaced by inherited or matched rules.
+    bool universal{ false };
 };
 
 class HtmlNode : public std::enable_shared_from_this<HtmlNode>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -44,13 +44,16 @@ public:
     uint32_t getTimeElapsed();
     uint32_t getDuration() { return m_duration; }
 
+    void setPercentReverse(bool percentReverse);
+    bool isPercentReverse() const { return m_percentReverse; }
+
 protected:
     void onStyleApply(std::string_view styleName, const OTMLNodePtr& styleNode) override;
 
 private:
     void scheduleNextUpdate();
     void updateProgress();
-    void updateText(uint32_t remainingTimeMs);
+    void updateProgressText(uint32_t remainingTimeMs);
 
     float m_percent{ 0 };
     ScheduledEventPtr m_updateEvent{ nullptr };
@@ -60,4 +63,5 @@ private:
     bool m_showTime{ true };
     bool m_showProgress{ true };
     bool m_running{ false };
+    bool m_percentReverse{ false };
 };

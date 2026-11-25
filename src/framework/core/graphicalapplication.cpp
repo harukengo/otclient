@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,9 @@
 #include "asyncdispatcher.h"
 #include "clock.h"
 #include "eventdispatcher.h"
+#include "framework/graphics/declarations.h"
 #include "garbagecollection.h"
+#include "client/game.h"
 #include "framework/graphics/drawpoolmanager.h"
 #include "framework/graphics/graphics.h"
 #include "framework/graphics/image.h"
@@ -33,6 +35,7 @@
 #include "framework/graphics/texturemanager.h"
 #include "framework/input/mouse.h"
 #include "framework/ui/uimanager.h"
+#include <framework/util/stats.h>
 
 #ifdef FRAMEWORK_SOUND
 #include <framework/sound/soundmanager.h>
@@ -147,7 +150,10 @@ void GraphicalApplication::mainLoop() {
         return m_graphicFrameCounter.getFps();
     };
 
-    g_drawPool.draw();
+    {
+        AutoStat s(STATS_RENDER, "DrawPool");
+        g_drawPool.draw();
+    }
 
     if (m_graphicFrameCounter.update()) {
         g_dispatcher.addEvent([this, fps = FPS()] {
@@ -156,6 +162,22 @@ void GraphicalApplication::mainLoop() {
     }
 }
 #endif
+
+bool GraphicalApplication::canDrawMap() const {
+    using enum DrawPoolType;
+
+    if (!m_drawEvents->canDraw(MAP))
+        return false;
+
+    // FOREGROUND is here only because of attached widgets on the map (like tile widgets)
+    static constexpr std::array<DrawPoolType, 5> types{ MAP, LIGHT, FOREGROUND_MAP, CREATURE_INFORMATION, FOREGROUND };
+
+    for (DrawPoolType type : types) {
+        if (g_drawPool.isDrawing(type))
+            return false;
+    }
+    return true;
+}
 
 void GraphicalApplication::run()
 {
@@ -179,7 +201,7 @@ void GraphicalApplication::run()
     };
 #endif
     // THREAD - POOL & MAP
-    const auto& mapThread = g_asyncDispatcher.submit_task([this] {
+    const auto& mapThread = g_asyncDispatcher->submit_task([this] {
         BS::multi_future<void> tasks;
 
         g_luaThreadId = g_eventThreadId = stdext::getThreadId();
@@ -191,23 +213,41 @@ void GraphicalApplication::run()
                 continue;
             }
 
-            if (m_drawEvents->canDraw(DrawPoolType::MAP)) {
+            if (g_game.isOnline()) {
+                AutoStat s(STATS_RENDER, "DrawPreload");
                 m_drawEvents->preLoad();
+            }
 
-                for (const auto type : { DrawPoolType::LIGHT , DrawPoolType::FOREGROUND, DrawPoolType::FOREGROUND_MAP }) {
+            bool canDrawForeground = !g_drawPool.isDrawing(DrawPoolType::FOREGROUND) && m_drawEvents->canDraw(DrawPoolType::FOREGROUND);
+
+            if (!g_game.isOnline() && canDrawForeground) {
+                AutoStat s(STATS_RENDER, "DrawForegroundUI");
+                g_ui.render(DrawPoolType::FOREGROUND);
+            } else if (canDrawMap()) {
+                if (canDrawForeground) {
+                    tasks.emplace_back(g_asyncDispatcher->submit_task([] {
+                        AutoStat s(STATS_RENDER, "DrawForegroundUI");
+                        g_ui.render(DrawPoolType::FOREGROUND);
+                    }));
+                }
+
+                static constexpr std::array<DrawPoolType, 2> types{ DrawPoolType::LIGHT, DrawPoolType::FOREGROUND_MAP };
+                for (const auto type : types) {
                     if (m_drawEvents->canDraw(type)) {
-                        tasks.emplace_back(g_asyncDispatcher.submit_task([this, type] {
+                        tasks.emplace_back(g_asyncDispatcher->submit_task([this, type] {
+                            AutoStat s(STATS_RENDER, type == DrawPoolType::LIGHT ? "DrawLight" : "DrawForegroundMap");
                             m_drawEvents->draw(type);
                         }));
                     }
                 }
 
-                m_drawEvents->draw(DrawPoolType::MAP);
+                {
+                    AutoStat s(STATS_RENDER, "DrawMap");
+                    m_drawEvents->draw(DrawPoolType::MAP);
+                }
 
                 tasks.wait();
                 tasks.clear();
-            } else if (m_drawEvents->canDraw(DrawPoolType::FOREGROUND)) {
-                g_ui.render(DrawPoolType::FOREGROUND);
             }
 
             m_mapProcessFrameCounter.update();
@@ -227,10 +267,16 @@ void GraphicalApplication::run()
             continue;
         }
 
-        g_drawPool.draw();
+        {
+            AutoStat s(STATS_RENDER, "DrawPool");
+            g_drawPool.draw();
+        }
 
         // update screen pixels
-        g_window.swapBuffers();
+        {
+            AutoStat s(STATS_RENDER, "SwapBuffers");
+            g_window.swapBuffers();
+        }
 
         if (m_graphicFrameCounter.update()) {
             g_dispatcher.addEvent([this, fps = FPS()] {
@@ -265,10 +311,23 @@ void GraphicalApplication::poll()
 }
 void GraphicalApplication::mainPoll()
 {
-    g_clock.update();
-    g_mainDispatcher.poll();
-    g_window.poll();
-    g_textures.poll();
+    AutoStat s(STATS_MAIN, "MainPoll");
+    {
+        AutoStat s2(STATS_MAIN, "ClockUpdate");
+        g_clock.update();
+    }
+    {
+        AutoStat s2(STATS_MAIN, "DispatcherPoll");
+        g_mainDispatcher.poll();
+    }
+    {
+        AutoStat s2(STATS_MAIN, "WindowPoll");
+        g_window.poll();
+    }
+    {
+        AutoStat s2(STATS_MAIN, "TexturePoll");
+        g_textures.poll();
+    }
 }
 
 void GraphicalApplication::close()
@@ -327,7 +386,7 @@ void GraphicalApplication::doScreenshot(std::string file)
         auto pixels = std::make_shared<std::vector<uint8_t>>(width * height * 4 * sizeof(GLubyte), 0);
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels->data());
 
-        g_asyncDispatcher.detach_task([resolution, pixels, file] {
+        g_asyncDispatcher->detach_task([resolution, pixels, file] {
             try {
                 Image image(resolution, 4, pixels->data());
                 image.flipVertically();

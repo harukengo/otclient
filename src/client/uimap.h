@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,9 @@ public:
     UIMap();
     ~UIMap() override;
 
+    using UIWidget::draw;
+    using UIWidget::setShader;
+
     void drawSelf(DrawPoolType drawPane) override;
     void draw(DrawPoolType drawPane);
 
@@ -45,9 +48,11 @@ public:
     void setDrawLights(bool enable);
     void setLimitVisibleDimension(bool enable);
     void setDrawManaBar(bool enable);
+    void setDrawHarmony(bool enable);
     void setShader(std::string_view name, float fadein, float fadeout);
     void setMinimumAmbientLight(float intensity);
     void setDrawViewportEdge(bool force);
+    bool isDrawingViewportEdge();
     bool isDrawingNames();
     bool isDrawingHealthBars();
     bool isDrawingLights();
@@ -63,12 +68,15 @@ public:
     Otc::FloorViewMode getFloorViewMode();
     CreaturePtr getFollowingCreature();
     Position getCameraPosition();
+    Point getTilePoint(const Position& pos);
+    Rect getTileRect(const Position& pos);
     Position getPosition(const Point& mousePos);
     TilePtr getTile(const Point& mousePos);
     Size getVisibleDimension();
     float getMinimumAmbientLight();
     void setCrosshairTexture(const std::string& texturePath);
     void setDrawHighlightTarget(bool enable);
+    void setCursorAnimations(bool enable);
     void setAntiAliasingMode(Otc::AntialiasingMode mode);
     void setFloorFading(uint16_t v);
     MapViewPtr getMapView() const;
@@ -97,6 +105,7 @@ public:
 protected:
     void onStyleApply(std::string_view styleName, const OTMLNodePtr& styleNode) override;
     void onGeometryChange(const Rect& oldRect, const Rect& newRect) override;
+    void onHoverChange(bool hovered) override;
     bool onMouseMove(const Point& mousePos, const Point& mouseMoved) override;
     bool onMousePress(const Point& mousePos, Fw::MouseButton button) override;
     bool onMouseRelease(const Point& mousePos, Fw::MouseButton button) override;
@@ -105,6 +114,7 @@ protected:
 private:
     void updateVisibleDimension();
     void updateMapSize();
+    void resetCursorToDefault();
 
     MapViewPtr m_mapView;
     Rect m_mapRect;

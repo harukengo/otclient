@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -248,6 +248,11 @@ void UIWidget::setImageSource(const std::string_view source, const bool base64)
         if (size.height() <= 0 || hasProp(PropImageAutoResize))
             size.setHeight(imageSize.height());
 
-        setSize(size);
+        // Remote HTML images arrive after layout; ancestors must re-measure the new intrinsic size.
+        if (setRect(Rect(m_rect.topLeft(), size)) && isOnHtml()) {
+            invalidateHtmlAncestorsHeight();
+            scheduleParentHtmlFlexLayout();
+            refreshHtml(true);
+        }
     }
 }

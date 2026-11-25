@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -73,6 +73,7 @@ public:
 
     void setDrawNames(const bool enable) { m_drawNames = enable; }
     bool isDrawingNames() const { return m_drawNames; }
+    bool isDrawingViewportEdge() const { return m_drawViewportEdge; }
 
     void setDrawHealthBars(const bool enable) { m_drawHealthBars = enable; }
     bool isDrawingHealthBars() const { return m_drawHealthBars; }
@@ -85,6 +86,9 @@ public:
 
     void setDrawManaBar(const bool enable) { m_drawManaBar = enable; }
     bool isDrawingManaBar() const { return m_drawManaBar; }
+
+    void setDrawHarmony(const bool enable) { m_drawHarmony = enable; }
+    bool isDrawingHarmony() const { return m_drawHarmony; }
 
     void move(int32_t x, int32_t y);
 
@@ -118,12 +122,20 @@ public:
     void setAntiAliasingMode(Otc::AntialiasingMode mode);
 
     void onMouseMove(const Position& mousePos, bool isVirtualMove = false);
+    void updateMouseCursor(const Position& mousePos);
     void onKeyRelease(const InputEvent& inputEvent);
 
     void setLastMousePosition(const Position& mousePos) { m_mousePosition = mousePos; }
     const Position& getLastMousePosition() const { return m_mousePosition; }
 
-    void setDrawHighlightTarget(const bool enable) { m_drawHighlightTarget = enable; }
+    void setDrawHighlightTarget(const bool enable)
+    {
+        if (m_drawHighlightTarget == enable)
+            return;
+
+        m_drawHighlightTarget = enable;
+        destroyHighlightTile();
+    }
 
     void setFloorFading(const uint16_t value) { m_floorFading = value; }
 
@@ -132,6 +144,9 @@ public:
 
     void addForegroundTile(const TilePtr& tile);
     void removeForegroundTile(const TilePtr& tile);
+
+    void setCursorAnimations(const bool enable) { m_cursorAnimations = enable; }
+    bool hasCursorAnimations() const { return m_cursorAnimations; }
 
 protected:
     void onGlobalLightChange(const Light& light);
@@ -189,7 +204,7 @@ private:
     uint8_t calcFirstVisibleFloor(bool checkLimitsFloorsView) const;
     uint8_t calcLastVisibleFloor() const;
 
-    void drawFloor();
+    void drawFloor(bool updateHover);
     void drawLights();
 
     bool canFloorFade() const { return m_floorViewMode == Otc::FADE && m_floorFading; }
@@ -243,6 +258,7 @@ private:
     Position m_customCameraPosition;
     Position m_lastCameraPosition;
     Position m_mousePosition;
+    Position m_highlightMousePosition;
     Position m_shaderPosition;
 
     std::array<AwareRange, Otc::InvalidDirection + 1> m_viewPortDirection;
@@ -259,6 +275,8 @@ private:
     bool m_smooth{ true };
     bool m_follow{ true };
     bool m_drawingLight{ true };
+    bool m_drawHarmony{ true };
+    bool m_highlightUpdatesEnabled{ false };
 
     bool m_fadeFinish{ false };
     bool m_autoViewMode{ false };
@@ -268,6 +286,7 @@ private:
     bool m_shiftPressed{ false };
     bool m_multithreading{ false };
     bool m_drawCoveredThings{ false };
+    bool m_cursorAnimations{ true };
 
     FadeType m_fadeType{ FadeType::NONE };
 

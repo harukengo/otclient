@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,7 @@
 #pragma once
 
 #include "declarations.h"
+#include <framework/util/stats.h>
 
 #ifdef __has_include
 
@@ -387,6 +388,35 @@ public:
     T polymorphicPop() { T v = castValue<T>(); pop(1); return v; }
 
 private:
+    class ScopedState
+    {
+    public:
+        ScopedState(LuaInterface& lua, lua_State* state) :
+            m_lua(lua),
+            m_previousState(lua.L)
+        {
+            m_lua.L = state;
+        }
+
+        ScopedState(const ScopedState&) = delete;
+        ScopedState& operator=(const ScopedState&) = delete;
+
+        ~ScopedState() { restore(); }
+
+        void restore()
+        {
+            if (m_active) {
+                m_lua.L = m_previousState;
+                m_active = false;
+            }
+        }
+
+    private:
+        LuaInterface& m_lua;
+        lua_State* m_previousState{ nullptr };
+        bool m_active{ true };
+    };
+
     lua_State* L{ nullptr };
     int m_weakTableRef{ 0 };
     int m_cppCallbackDepth{ 0 };
@@ -498,6 +528,8 @@ T LuaInterface::castValue(int index)
 template<typename... T>
 int LuaInterface::luaCallGlobalField(const std::string_view global, const std::string_view field, const T&... args)
 {
+    AutoStat s(STATS_LUA, std::string(global) + ":" + std::string(field));
+
     g_lua.getGlobalField(global, field);
     if (!g_lua.isNil()) {
         const int numArgs = g_lua.polymorphicPush(args...);
@@ -511,7 +543,7 @@ template<typename... T>
 void LuaInterface::callGlobalField(const std::string_view global, const std::string_view field, const T&... args)
 {
     if (g_luaThreadId > -1 && g_luaThreadId != stdext::getThreadId()) {
-        g_logger.warning("callGlobalField(" + std::string{ global } + ", " + std::string{ field } + ") is being called outside the context of the lua call.");
+        g_logger.warning("CallGlobalField(" + std::string{ global } + ", " + std::string{ field } + ") is being called outside the context of the lua call.");
         return;
     }
 
@@ -524,7 +556,7 @@ template<typename R, typename... T>
 R LuaInterface::callGlobalField(const std::string_view global, const std::string_view field, const T&... args)
 {
     if (g_luaThreadId > -1 && g_luaThreadId != stdext::getThreadId()) {
-        g_logger.warning("callGlobalField(" + std::string{ global } + ", " + std::string{ field } + ") is being called outside the context of the lua call.");
+        g_logger.warning("CallGlobalField(" + std::string{ global } + ", " + std::string{ field } + ") is being called outside the context of the lua call.");
         return R();
     }
 

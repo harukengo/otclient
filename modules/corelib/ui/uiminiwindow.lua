@@ -4,6 +4,7 @@ UIMiniWindow = extends(UIWindow, 'UIMiniWindow')
 function UIMiniWindow.create()
     local miniwindow = UIMiniWindow.internalCreate()
     miniwindow.UIMiniWindowContainer = true
+    miniwindow:addSound(ESoundUI.SoundTypeClick, 2785)
     return miniwindow
 end
 
@@ -132,13 +133,7 @@ function UIMiniWindow:setupOnStart()
             [char] = {}
         }
     elseif not settings[char] then
-        -- if there are no settings for this character, we'll copy the settings from
-        -- another one, so we'll have something better than all the windows randomly positioned
-        for k, v in pairs(settings) do
-            settings[char] = v
-            g_settings.setNode('CharMiniWindows', settings)
-            break
-        end
+        settings[char] = {}
     end
 
     local selfSettings = settings[char][self:getId()]
@@ -358,7 +353,7 @@ function UIMiniWindow:getSettings(name)
     end
 
     local settings = g_settings.getNode('CharMiniWindows')
-    if settings then
+    if settings and settings[char] then
         local selfSettings = settings[char][self:getId()]
         if selfSettings then
             return selfSettings[name]
@@ -541,7 +536,9 @@ function UIMiniWindow:lock(dontSave)
         lockButton:setOn(true)
     end
     self:setDraggable(false)
-    if not dontsave then
+    self:setBorderWidth(1)
+    self:setBorderColor('#d33c3c')
+    if not dontSave then
         self:setSettings({
             locked = true
         })
@@ -556,7 +553,8 @@ function UIMiniWindow:unlock(dontSave)
         lockButton:setOn(false)
     end
     self:setDraggable(true)
-    if not dontsave then
+    self:setBorderWidth(0)
+    if not dontSave then
         self:setSettings({
             locked = false
         })

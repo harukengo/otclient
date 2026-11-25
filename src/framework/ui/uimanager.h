@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -42,11 +42,14 @@ public:
     void updatePressedWidgetHTML(const UIWidgetList& widgets, const Point& clickedPos = {}, bool fireClicks = true);
     bool updateDraggingWidget(const UIWidgetPtr& draggingWidget, const Point& clickedPos = {});
     void updateHoveredWidget(bool now = false);
+    void updateHoveredText(bool now = false);
 
     void clearStyles();
     bool importStyle(const std::string& fl, bool checkDeviceStyles = true);
+    static std::string getDeviceStyleName(std::string_view stylePath, std::string_view deviceName);
     void importStyleFromOTML(const OTMLNodePtr& styleNode);
     void importStyleFromOTML(const OTMLDocumentPtr& doc);
+    void resolveStyleAliases(const OTMLNodePtr& styleNode) const;
     OTMLNodePtr getStyle(std::string_view sn);
     std::string getStyleName(std::string_view styleName);
     std::string getStyleClass(std::string_view styleName);
@@ -54,6 +57,7 @@ public:
 
     UIWidgetPtr loadUI(const std::string& file, const UIWidgetPtr& parent);
     UIWidgetPtr loadUIFromString(const std::string& data, const UIWidgetPtr& parent);
+    static std::string getDeviceUIName(std::string_view file, std::string_view deviceName);
     OTMLNodePtr loadDeviceUI(const std::string& file, OperatingSystem os);
     OTMLNodePtr loadDeviceUI(const std::string& file, DeviceType deviceType);
     UIWidgetPtr displayUI(const std::string& file) { return loadUI(file, m_rootWidget); }
@@ -86,6 +90,8 @@ protected:
     friend class GraphicalApplication;
 
 private:
+    void registerGlobalAliases(const OTMLDocumentPtr& doc);
+
     UIWidgetPtr m_rootWidget;
     UIWidgetPtr m_mouseReceiver;
     UIWidgetPtr m_keyboardReceiver;
@@ -96,7 +102,10 @@ private:
     UIWidgetList m_pressedWidgets;
     bool m_hoverUpdateScheduled{ false };
     bool m_drawDebugBoxes{ false };
+    bool m_hoverTextUpdateScheduled{ false };
     stdext::map<std::string, OTMLNodePtr> m_styles;
+    std::unordered_map<std::string, std::string> m_globalAliases;
+    std::string m_hoveredText;
     UIWidgetList m_destroyedWidgets;
     ScheduledEventPtr m_checkEvent;
 };

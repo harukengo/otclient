@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,10 @@
 
 #include "staticdata.h"
 
+#ifdef FRAMEWORK_SOUND
+#include <framework/sound/soundmanager_types.h>
+#endif
+
  // outfit
 int push_luavalue(const Outfit& outfit);
 bool luavalue_cast(int index, Outfit& outfit);
@@ -39,6 +43,8 @@ bool luavalue_cast(int index, MarketData& data);
 // NPC
 int push_luavalue(const std::vector<NPCData>& data);
 bool luavalue_cast(int index, std::vector<NPCData>& data);
+int push_luavalue(const NpcButton& button);
+int push_luavalue(const NpcChatWindowData& data);
 
 // light
 int push_luavalue(const Light& light);
@@ -64,6 +70,11 @@ int push_luavalue(const StoreOffer& offer);
 int push_luavalue(const HomeOffer& homeOffer);
 int push_luavalue(const Banner& banner);
 int push_luavalue(const StoreData& storeData);
+
+// item inspection
+int push_luavalue(const ItemInspectionData& data);
+int push_luavalue(const InspectionInventoryItem& entry);
+int push_luavalue(const CyclopediaCharacterInspection& data);
 
 // cyclopedia
 int push_luavalue(const CyclopediaBestiaryRace& race);
@@ -95,6 +106,19 @@ int push_luavalue(const CyclopediaCharacterMiscStats& data);
 // bestiary
 int push_luavalue(const RaceType& raceData);
 
+// sound
+#ifdef FRAMEWORK_SOUND
+int push_luavalue(const ClientSoundEffect& soundEffect);
+int push_luavalue(const SoundDebugChannelState& channel);
+int push_luavalue(const SoundDebugSourceState& source);
+int push_luavalue(const SoundDebugItemState& item);
+int push_luavalue(const SoundDebugEventState& event);
+int push_luavalue(const SoundDebugSnapshot& snapshot);
+#endif
+
+// task board
+int push_luavalue(const TaskBoardSoulsealEntryData& entry);
+
 // rewardWall
 int push_luavalue(const DailyRewardItem& item);
 int push_luavalue(const DailyRewardBundle& bundle);
@@ -105,8 +129,18 @@ int push_luavalue(const DailyRewardData& data);
 int push_luavalue(const ForgeOpenData& data);
 int push_luavalue(const ForgeTransferData& data);
 int push_luavalue(const ForgeItemInfo& data);
+int push_luavalue(const ForgeHistory& data);
+int push_luavalue(const ForgeTierPrice& data);
+int push_luavalue(const ForgeGradeData& data);
+int push_luavalue(const ForgeClassTierPrices& data);
+int push_luavalue(const ForgeResultData& data);
+int push_luavalue(const ForgeConfigData& data);
 
 // Game Analysers Structs
 int push_luavalue(const BossCooldownData& data);
 int push_luavalue(const PartyMemberData& data);
 int push_luavalue(const PartyMemberName& data);
+
+// whell gem atelier  
+int push_luavalue(const GemData& gem);  
+bool luavalue_cast(int index, GemData& gem);

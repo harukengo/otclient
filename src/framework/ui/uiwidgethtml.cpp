@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 OTClient <https://github.com/edubart/otclient>
+ * Copyright (c) 2010-2026 OTClient <https://github.com/edubart/otclient>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,8 @@ namespace {
     inline uint32_t SIZE_VERSION_COUNTER = 1;
     inline bool pendingFlush = false;
     inline std::vector<UIWidgetPtr> pendingWidgets;
+    constexpr size_t MAX_HTML_TASK_WIDGETS_PER_FLUSH = 2048;
+    constexpr size_t MAX_HTML_TASK_PASSES_PER_FLUSH = 48;
 
     constexpr bool isInlineLike(DisplayType d) noexcept {
         switch (d) {
@@ -199,7 +201,7 @@ namespace {
         int tallestH = -1;
 
         int i = 0;
-        for (const auto& sp : parent->getChildren()) {
+        for (const auto& sp : parent->getChildrenRef()) {
             UIWidget* c = sp.get();
             if (c == self) break;
             if (skipInFlow(c)) { ++i; continue; }
@@ -237,6 +239,91 @@ namespace {
         ctx.lineWidthBefore = runWidth;
         ctx.tallestInlineWidget = tallest;
         return ctx;
+    }
+
+    [[nodiscard]] inline bool inFlowSibling(UIWidget* c) noexcept {
+        return !skipInFlow(c) && mapLogicalFloat(c->getFloat()) == FloatType::None;
+    }
+
+    // True when the widget shares its parent's line box with other inline
+    // content (e.g. "text <em>x</em> text"), so it must not span the full width.
+    bool isInMixedInlineRun(UIWidget* self) {
+        auto* parent = self->getParent().get();
+        if (!parent || !isInlineLike(self->getDisplay()))
+            return false;
+        for (const auto& sp : parent->getChildrenRef()) {
+            UIWidget* c = sp.get();
+            if (c != self && inFlowSibling(c) && isInlineLike(c->getDisplay()))
+                return true;
+        }
+        return false;
+    }
+
+    // Widest fixed-size (px) descendant: content a table column cannot shrink
+    // below without overlapping its neighbour (images, px-wide tables).
+    int fixedMinContentWidth(UIWidget* w, int depth = 0) {
+        if (!w || depth > 32 || !w->isExplicitlyVisible())
+            return 0;
+
+        const int marginX = std::max(0, w->getMarginLeft()) + std::max(0, w->getMarginRight());
+        const auto& width = w->getWidthHtml();
+        if (width.unit == Unit::Px)
+            return std::max(0, width.value) + marginX;
+
+        int widest = 0;
+        for (const auto& c : w->getChildrenRef())
+            widest = std::max(widest, fixedMinContentWidth(c.get(), depth + 1));
+        return widest > 0 ? widest + marginX + w->getPaddingLeft() + w->getPaddingRight() : 0;
+    }
+
+    // Simulates width-based line breaking for the inline run that ends at
+    // `self`. Returns true when `self` starts a new line and sets `lineAbove`
+    // to the tallest widget of the previous line.
+    bool inlineRunWraps(UIWidget* self, UIWidget*& lineAbove) {
+        lineAbove = nullptr;
+        auto* parent = self->getParent().get();
+        if (!parent)
+            return false;
+
+        const int avail = getParentInnerWidth(parent);
+        if (avail <= 0)
+            return false;
+
+        int lineW = 0;
+        UIWidget* lineTallest = nullptr;
+        UIWidget* prevLineTallest = nullptr;
+        bool startsLine = false;
+
+        for (const auto& sp : parent->getChildrenRef()) {
+            UIWidget* c = sp.get();
+            if (!inFlowSibling(c))
+                continue;
+            if (!isInlineLike(c->getDisplay())) {
+                lineW = 0;
+                lineTallest = prevLineTallest = nullptr;
+                if (c == self)
+                    break;
+                continue;
+            }
+
+            const int w = std::max<int>(0, c->getWidth()) + c->getMarginLeft() + c->getMarginRight();
+            startsLine = lineW > 0 && lineW + w > avail;
+            if (startsLine) {
+                prevLineTallest = lineTallest;
+                lineW = 0;
+                lineTallest = nullptr;
+            }
+            lineW += w;
+            if (!lineTallest || c->getHeight() + c->getMarginTop() + c->getMarginBottom() >
+                lineTallest->getHeight() + lineTallest->getMarginTop() + lineTallest->getMarginBottom())
+                lineTallest = c;
+
+            if (c == self) {
+                lineAbove = startsLine ? prevLineTallest : nullptr;
+                return startsLine && lineAbove;
+            }
+        }
+        return false;
     }
 
     bool applyClear(UIWidget* self, const FlowContext& ctx, ClearType effClear) {
@@ -322,7 +409,7 @@ namespace {
         }
     }
 
-    static inline void applyTableRowChild(UIWidget* self, const FlowContext& ctx, bool topCleared) {
+    static inline void applyTableRowChild(UIWidget* self, const FlowContext& ctx, bool) {
         self->addAnchor(Fw::AnchorTop, "parent", Fw::AnchorTop);
 
         if (!ctx.lastNormalWidget) {
@@ -480,20 +567,20 @@ namespace {
 
     static int detectColumnCount(UIWidget* table) {
         int cols = 0;
-        for (const auto& ch : table->getChildren()) {
+        for (const auto& ch : table->getChildrenRef()) {
             UIWidget* g = ch.get();
             if (isRowGroup(g->getDisplay())) {
-                for (const auto& rr : g->getChildren()) {
+                for (const auto& rr : g->getChildrenRef()) {
                     UIWidget* r = rr.get();
                     if (!isRow(r->getDisplay())) continue;
                     int c = 0;
-                    for (const auto& cc : r->getChildren())
+                    for (const auto& cc : r->getChildrenRef())
                         if (isCell(cc->getDisplay())) ++c;
                     if (c > cols) cols = c;
                 }
             } else if (isRow(g->getDisplay())) {
                 int c = 0;
-                for (const auto& cc : g->getChildren())
+                for (const auto& cc : g->getChildrenRef())
                     if (isCell(cc->getDisplay())) ++c;
                 if (c > cols) cols = c;
             }
@@ -510,11 +597,12 @@ namespace {
 
         std::vector<int> fixed(cols, -1);
         std::vector<int> perc(cols, 0);
+        std::vector<int> minW(cols, 0);
         std::vector<int> widths(cols, 0);
 
         auto scanRow = [&](UIWidget* r) {
             int j = 0;
-            for (const auto& cc : r->getChildren()) {
+            for (const auto& cc : r->getChildrenRef()) {
                 UIWidget* cell = cc.get();
                 if (!isCell(cell->getDisplay())) continue;
                 auto& wSpec = cell->getWidthHtml();
@@ -523,15 +611,21 @@ namespace {
                     fixed[j] = std::max<int>(fixed[j], wSpec.value + cell->getPaddingLeft() + cell->getPaddingRight());
                 } else if (wSpec.unit == Unit::Percent && wSpec.value > 0) {
                     perc[j] = std::max<int>(perc[j], wSpec.value);
+                } else {
+                    int content = 0;
+                    for (const auto& child : cell->getChildrenRef())
+                        content = std::max(content, fixedMinContentWidth(child.get()));
+                    if (content > 0)
+                        minW[j] = std::max<int>(minW[j], content + cell->getPaddingLeft() + cell->getPaddingRight());
                 }
                 if (++j >= cols) break;
             }
         };
 
-        for (const auto& ch : table->getChildren()) {
+        for (const auto& ch : table->getChildrenRef()) {
             UIWidget* g = ch.get();
             if (isRowGroup(g->getDisplay())) {
-                for (const auto& rr : g->getChildren())
+                for (const auto& rr : g->getChildrenRef())
                     if (isRow(rr->getDisplay())) scanRow(rr.get());
             } else if (isRow(g->getDisplay())) scanRow(g);
         }
@@ -548,6 +642,23 @@ namespace {
             if (perc[i] > 0 && widths[i] == 0) {
                 widths[i] = std::max<int>(0, (innerW * perc[i]) / 100);
                 remaining -= widths[i];
+            }
+        }
+
+        // Auto columns whose fixed-size content (images, px tables) exceeds an
+        // equal share keep that width; the rest share what remains.
+        for (bool changed = true; changed;) {
+            changed = false;
+            int flexLeft = 0;
+            for (int i = 0; i < cols; ++i) if (widths[i] == 0) ++flexLeft;
+            if (flexLeft == 0) break;
+            const int share = std::max<int>(0, remaining / flexLeft);
+            for (int i = 0; i < cols; ++i) {
+                if (widths[i] == 0 && minW[i] > share) {
+                    widths[i] = minW[i];
+                    remaining -= minW[i];
+                    changed = true;
+                }
             }
         }
 
@@ -578,7 +689,7 @@ namespace {
 
         std::function<void(UIWidget*)> applyRow = [&](UIWidget* r) {
             int j = 0;
-            for (const auto& cc : r->getChildren()) {
+            for (const auto& cc : r->getChildrenRef()) {
                 UIWidget* cell = cc.get();
                 if (!isCell(cell->getDisplay())) continue;
 
@@ -590,10 +701,10 @@ namespace {
             }
         };
 
-        for (const auto& ch : table->getChildren()) {
+        for (const auto& ch : table->getChildrenRef()) {
             UIWidget* g = ch.get();
             if (isRowGroup(g->getDisplay())) {
-                for (const auto& rr : g->getChildren())
+                for (const auto& rr : g->getChildrenRef())
                     if (isRow(rr->getDisplay())) applyRow(rr.get());
             } else if (isRow(g->getDisplay())) applyRow(g);
         }
@@ -604,12 +715,30 @@ namespace {
         auto& wHtml = widget->getWidthHtml();
         auto& hHtml = widget->getHeightHtml();
 
-        if (width > -1 && (wHtml.needsUpdate(Unit::Percent, SIZE_VERSION_COUNTER) || wHtml.needsUpdate(Unit::Auto, SIZE_VERSION_COUNTER))) {
-            if (wHtml.needsUpdate(Unit::Percent))
-                width = std::round(width * (wHtml.value / 100.0));
+        bool parentIsFlexItem = false;
+        if (const auto parent = widget->getParent()) {
+            const auto parentDisplay = parent->getDisplay();
+            parentIsFlexItem =
+                isFlexContainer(parentDisplay) &&
+                widget->getPositionType() != PositionType::Absolute;
+        }
 
-            widget->setWidth_px(width);
-            wHtml.applyUpdate(width, SIZE_VERSION_COUNTER);
+        const bool widthPercentNeedsUpdate = wHtml.needsUpdate(Unit::Percent, SIZE_VERSION_COUNTER);
+        const bool widthAutoNeedsUpdate = wHtml.needsUpdate(Unit::Auto, SIZE_VERSION_COUNTER);
+        const bool widthAutoFill =
+            (wHtml.unit == Unit::Auto) &&
+            widthAutoFillsContainingBlock(widget->getDisplay()) &&
+            !parentIsFlexItem;
+        const bool resolveAutoWidthFromParent = !parentIsFlexItem && (widthAutoNeedsUpdate || widthAutoFill);
+
+        if (width > -1 && (widthPercentNeedsUpdate || resolveAutoWidthFromParent)) {
+            int resolvedWidth = width;
+            if (widthPercentNeedsUpdate)
+                resolvedWidth = std::round(width * (wHtml.value / 100.0));
+
+            widget->setWidth_px(resolvedWidth);
+            wHtml.applyUpdate(resolvedWidth, SIZE_VERSION_COUNTER);
+            width = resolvedWidth;
 
             updateChildren = true;
         }
@@ -621,18 +750,36 @@ namespace {
             updateChildren = true;
         }
 
-        if (updateChildren) {
-            for (const auto& child : widget->getChildren()) {
+        if (updateChildren && !isFlexContainer(widget->getDisplay())) {
+            // Child auto/percent dimensions must resolve against this widget's
+            // inner content box, not its full box width/height.
+            const int childContainingWidth = std::max<int>(0, widget->getWidth() - widget->getPaddingLeft() - widget->getPaddingRight());
+            const int childContainingHeight = std::max<int>(0, widget->getHeight() - widget->getPaddingTop() - widget->getPaddingBottom());
+            for (const auto& child : widget->getChildrenRef()) {
                 if (child->getWidthHtml().unit == Unit::Auto ||
                     child->getWidthHtml().unit == Unit::Percent ||
                     child->getHeightHtml().unit == Unit::Percent) {
-                    updateDimension(child.get(), width, height);
+                    updateDimension(child.get(), childContainingWidth, childContainingHeight);
                 }
             }
         }
     }
 
-    static inline void applyFitContentRecursive(UIWidget* w, int& width, int& height) {
+    static inline void applyFitContentRecursive(UIWidget* w, int& width, int& height, int wrapHint = -1) {
+        const bool parentIsFlex = isFlexContainer(w->getDisplay());
+        const FlexDirection parentFlexDirection = w->getFlexDirection();
+        const bool parentIsRowFlex = parentIsFlex
+            && (parentFlexDirection == FlexDirection::Row
+                || parentFlexDirection == FlexDirection::RowReverse);
+        const bool parentIsColumnFlex = parentIsFlex
+            && (parentFlexDirection == FlexDirection::Column
+                || parentFlexDirection == FlexDirection::ColumnReverse);
+        const int parentMainGap = parentIsRowFlex ? std::max(0, w->getColumnGap())
+            : (parentIsColumnFlex ? std::max(0, w->getRowGap()) : 0);
+        size_t measuredChildren = 0;
+        const int wrapWidth = wrapHint >= 0 ? wrapHint
+            : (w->getWidthHtml().unit == Unit::FitContent ? 0 : getParentInnerWidth(w));
+
         int maxLineWidth = 0, totalHeight = 0, runWidth = 0, runHeight = 0;
 
         auto flushLine = [&]() {
@@ -644,16 +791,24 @@ namespace {
             }
         };
 
-        for (auto& childPtr : w->getChildren()) {
+        for (const auto& childPtr : w->getChildrenRef()) {
             UIWidget* c = childPtr.get();
             if (c->getFloat() != FloatType::None || c->getPositionType() == PositionType::Absolute)
                 continue;
 
-            if (c->getHtmlNode() && c->getHtmlNode()->getType() == NodeType::Text)
+            const bool isTextNode = c->getHtmlNode() && c->getHtmlNode()->getType() == NodeType::Text;
+            // During intrinsic (fit-content) measurement read the unwrapped text
+            // size instead of resizing the text widget; mutating it would leave
+            // the text unwrapped once the real width is restored.
+            const bool intrinsicText = isTextNode && w->getWidthHtml().unit == Unit::FitContent
+                && c->getRealTextSize().width() > 0;
+            if (isTextNode && !intrinsicText)
                 c->updateSize();
 
-            int childContentW = c->getWidth();
-            int childContentH = c->getHeight();
+            int childContentW = intrinsicText ? c->getRealTextSize().width() : c->getWidth();
+            // Keep the height wrapped at the text's current width so intrinsic
+            // passes don't collapse already laid-out paragraphs to one line.
+            int childContentH = intrinsicText ? std::max<int>(c->getRealTextSize().height(), c->getHeight()) : c->getHeight();
 
             const auto& cwSpec = c->getWidthHtml();
             const auto& chSpec = c->getHeightHtml();
@@ -687,8 +842,45 @@ namespace {
             int subW = 0, subH = 0;
             if ((!widthExplicit || widthContentDriven || layoutContentDriven) ||
                 (!heightExplicit || heightContentDriven || layoutContentDriven)) {
-                if (!c->getChildren().empty()) {
-                    applyFitContentRecursive(c, subW, subH);
+                if (!c->getChildrenRef().empty()) {
+                    // Propagate FitContent to this level so text nodes at deeper
+                    // recursion levels see FitContent on their parent and use
+                    // m_realTextSize.width() instead of m_parent->getSize().width() (0).
+                    // Save and restore version/pendingUpdate state so the FitContent
+                    // measurement doesn't contaminate version tracking — otherwise
+                    // nested widgets can't be re-measured when layoutFlex assigns
+                    // final sizes later.
+                    auto& cwh = c->getWidthHtml();
+                    const SizeUnit origWidthSpec = cwh;
+                    // Auto-width blocks keep wrapping their inline runs at the
+                    // width they already resolved to, so the stored height is
+                    // not collapsed to a single unwrapped line.
+                    const int childWrapHint = origWidthSpec.unit == Unit::Auto && breakLine(d) && c->getWidth() > 0
+                        ? getParentInnerWidth(c) : -1;
+                    cwh.unit = Unit::FitContent;
+                    applyFitContentRecursive(c, subW, subH, childWrapHint);
+                    cwh = origWidthSpec;
+                    if (isFlexContainer(d) && !c->isInFlexLayout()) {
+                        // Fit-content measurement approximates flex flow before
+                        // layoutFlex() runs. Re-run the real flex layout once the
+                        // intrinsic child sizes are available so wrapped rows and
+                        // final gap handling produce the correct container height.
+                        layoutFlex(*c);
+                    }
+                    // After the recursive call (and optional layoutFlex), c's height
+                    // has been set via setHeight_px and includes its own padding.
+                    // Use that value instead of the raw subH output, which only
+                    // accumulates children heights without the widget's own padding.
+                    if (c->getHeight() > subH)
+                        subH = c->getHeight();
+                    if (c->getWidth() > subW)
+                        subW = c->getWidth();
+                } else if (!c->getText().empty()) {
+                    // Childless widget with text attribute (e.g. <span text="...">).
+                    // Use the unwrapped intrinsic text size for measurement.
+                    const Size rts = c->getRealTextSize();
+                    subW = rts.width();
+                    subH = rts.height();
                 }
             }
 
@@ -708,17 +900,30 @@ namespace {
                 if (subH > 0) childContentH = std::max<int>(childContentH, subH);
             }
 
-            const int childOuterW = std::max<int>(0, childContentW);
-            const int childOuterH = std::max<int>(0, childContentH);
+            const int childOuterW = std::max<int>(0, childContentW + c->getMarginLeft() + c->getMarginRight());
+            const int childOuterH = std::max<int>(0, childContentH + c->getMarginTop() + c->getMarginBottom());
+            // Flex parents measure children on their main axis first; non-flex
+            // parents still defer to the child display type for line breaks.
+            const bool shouldBreak = parentIsFlex ? parentIsColumnFlex : breakLine(c->getDisplay());
 
-            if (breakLine(c->getDisplay())) {
+            if (shouldBreak) {
                 flushLine();
+                if (parentIsColumnFlex && measuredChildren > 0)
+                    totalHeight += parentMainGap;
                 if (childOuterW > maxLineWidth) maxLineWidth = childOuterW;
                 totalHeight += childOuterH;
             } else {
+                // Wrap inline runs at the container's resolved width so the
+                // measured height accounts for every line of the run.
+                if (!parentIsFlex && runWidth > 0 && wrapWidth > 0 && runWidth + childOuterW > wrapWidth)
+                    flushLine();
+                if (parentIsRowFlex && measuredChildren > 0)
+                    runWidth += parentMainGap;
                 runWidth += childOuterW;
                 if (childOuterH > runHeight) runHeight = childOuterH;
             }
+
+            ++measuredChildren;
         }
 
         flushLine();
@@ -806,6 +1011,94 @@ namespace {
                 break;
         }
     }
+
+    // Natural content height of a table cell from its laid-out in-flow children.
+    // The table stretches cells to their row height, so reading the cell's own
+    // height back would never let a row follow a late child resize (text re-wrap).
+    // Returns -1 when the cell has no measurable in-flow content.
+    int measureTableCellContentHeight(UIWidget* cell) {
+        const int wrapWidth = getParentInnerWidth(cell);
+        int total = 0, runWidth = 0, runHeight = 0;
+        bool measured = false;
+        for (const auto& child : cell->getChildrenRef()) {
+            UIWidget* c = child.get();
+            if (!c->isAnchorable() || c->getFloat() != FloatType::None || c->getPositionType() == PositionType::Absolute)
+                continue;
+
+            const int outerW = std::max<int>(0, c->getWidth() + c->getMarginLeft() + c->getMarginRight());
+            const int outerH = std::max<int>(0, c->getHeight() + c->getMarginTop() + c->getMarginBottom());
+            measured = true;
+            if (breakLine(c->getDisplay())) {
+                total += runHeight;
+                runWidth = runHeight = 0;
+                total += outerH;
+                continue;
+            }
+            if (runWidth > 0 && wrapWidth > 0 && runWidth + outerW > wrapWidth) {
+                total += runHeight;
+                runWidth = runHeight = 0;
+            }
+            runWidth += outerW;
+            runHeight = std::max(runHeight, outerH);
+        }
+        return measured ? total + runHeight : -1;
+    }
+}
+
+void UIWidget::flushPendingHtmlWidgets() {
+    size_t processedWidgets = 0;
+    size_t passes = 0;
+    bool budgetExhausted = false;
+
+    while (!pendingWidgets.empty() && passes < MAX_HTML_TASK_PASSES_PER_FLUSH && !budgetExhausted) {
+        auto widgets = std::move(pendingWidgets);
+        pendingWidgets.clear();
+
+        for (size_t i = 0; i < widgets.size(); ++i) {
+            if (processedWidgets >= MAX_HTML_TASK_WIDGETS_PER_FLUSH) {
+                std::vector<UIWidgetPtr> remaining;
+                remaining.reserve((widgets.size() - i) + pendingWidgets.size());
+                remaining.insert(remaining.end(), widgets.begin() + static_cast<std::ptrdiff_t>(i), widgets.end());
+                remaining.insert(remaining.end(), pendingWidgets.begin(), pendingWidgets.end());
+                pendingWidgets = std::move(remaining);
+                budgetExhausted = true;
+                break;
+            }
+
+            const auto& widget = widgets[i];
+            if (!widget || widget->isDestroyed()) {
+                ++processedWidgets;
+                continue;
+            }
+
+            // Clear the flags before running the tasks: a task may legitimately re-schedule
+            // the same widget (e.g. a table cell re-measuring after its text re-wraps
+            // inside its own table layout), which must queue another pass, not be lost.
+            const bool needsSize = widget->hasProp(PropUpdateSize);
+            const bool needsAnchor = widget->hasProp(PropApplyAnchorAlignment);
+            widget->setProp(PropUpdateSize, false);
+            widget->setProp(PropApplyAnchorAlignment, false);
+
+            if (needsSize)
+                widget->updateSize();
+
+            if (needsAnchor)
+                widget->applyAnchorAlignment();
+
+            ++processedWidgets;
+        }
+
+        ++passes;
+    }
+
+    ++SIZE_VERSION_COUNTER;
+
+    if (!pendingWidgets.empty()) {
+        g_dispatcher.deferEvent(&UIWidget::flushPendingHtmlWidgets);
+        return;
+    }
+
+    pendingFlush = false;
 }
 
 void UIWidget::refreshHtml(bool siblingsTo) {
@@ -832,9 +1125,23 @@ void UIWidget::refreshHtml(bool siblingsTo) {
         parent_fitHeight->applyDimension(false, parent_fitHeight->m_height.unit, parent_fitHeight->m_height.value);
 
     if (siblingsTo) {
-        for (const auto& child : m_parent->m_children) {
-            child->scheduleHtmlTask(PropApplyAnchorAlignment);
+        if (m_parent.get() != g_ui.getRootWidget().get()) {
+            for (const auto& child : m_parent->m_children) {
+                child->scheduleHtmlTask(PropApplyAnchorAlignment);
+            }
         }
+    }
+}
+
+void UIWidget::invalidateHtmlAncestorsHeight() {
+    // Content-sized ancestors measure their height once; re-flag them so a
+    // late child resize (text re-wrap, async image) propagates up the tree.
+    for (auto parent = m_parent; parent && parent->isOnHtml(); parent = parent->m_parent) {
+        if (parent->m_height.unit != Unit::FitContent)
+            break;
+        parent->m_height.pendingUpdate = true;
+        parent->m_height.version = 0;
+        parent->scheduleHtmlTask(PropUpdateSize);
     }
 }
 
@@ -844,7 +1151,7 @@ void UIWidget::setLineHeight(std::string valueStr) {
 
     const std::string_view sv = valueStr;
     const Unit unit = detectUnit(sv);
-    int16_t num = stdext::to_number(std::string(numericPart(sv)));
+    int32_t num = stdext::to_number(std::string(numericPart(sv)));
     m_lineHeight = { unit, num, num, true };
 }
 
@@ -854,16 +1161,17 @@ void UIWidget::applyDimension(bool isWidth, std::string valueStr) {
 
     const std::string_view sv = valueStr;
     const Unit unit = detectUnit(sv);
-    int16_t num = stdext::to_number(std::string(numericPart(sv)));
+    int32_t num = stdext::to_number(std::string(numericPart(sv)));
     applyDimension(isWidth, unit, num);
     if (m_htmlNode)
         m_htmlNode->getStyles()["styles"][isWidth ? "width" : "height"] = { valueStr , "" };
 }
 
-void UIWidget::applyDimension(bool isWidth, Unit unit, int16_t value) {
-    int16_t valueCalculed = -1;
+void UIWidget::applyDimension(bool isWidth, Unit unit, int32_t value) {
+    int32_t valueCalculed = -1;
 
     bool needUpdate = false;
+    bool explicitPxResize = false;
 
     if (m_positionType == PositionType::Absolute && unit == Unit::Auto) {
         unit = Unit::FitContent;
@@ -903,6 +1211,7 @@ void UIWidget::applyDimension(bool isWidth, Unit unit, int16_t value) {
                     value += getPaddingTop() + getPaddingBottom();
                 setHeight_px(value);
             }
+            explicitPxResize = true;
             break;
         }
     }
@@ -916,7 +1225,7 @@ void UIWidget::applyDimension(bool isWidth, Unit unit, int16_t value) {
     if (!isOnHtml())
         return;
 
-    if (needUpdate) {
+    if (needUpdate || (explicitPxResize && isFlexContainer(m_displayType))) {
         scheduleHtmlTask(PropUpdateSize);
     }
 
@@ -1076,6 +1385,11 @@ void UIWidget::updateTableLayout()
                 cellHeight = cell->m_height.valueCalculed;
             if (cell->m_height.unit == Unit::Px)
                 cellHeight = cell->m_height.value;
+            else if (cell->m_height.unit == Unit::Auto || cell->m_height.unit == Unit::FitContent) {
+                const int contentHeight = measureTableCellContentHeight(cell);
+                if (contentHeight >= 0)
+                    cellHeight = contentHeight;
+            }
 
             const int outerHeight = std::max<int>(0, cellHeight) + cell->m_padding.top + cell->m_padding.bottom;
 
@@ -1163,6 +1477,43 @@ void UIWidget::updateTableLayout()
         }
     }
 
+    // Tables must not exceed their containing block (auto width) or their resolved
+    // percentage width: shrink the flexible columns (their content wraps) like the CSS auto table layout.
+    bool fixedColumnsShrunk = false;
+    const bool autoWidthTable = m_width.unit == Unit::Auto || m_width.unit == Unit::FitContent;
+    const bool percentWidthTable = m_width.unit == Unit::Percent && tableContentWidth > 0;
+    if ((autoWidthTable || percentWidthTable) && m_parent && !columnWidths.empty()) {
+        const int avail = percentWidthTable
+            ? tableContentWidth
+            : getParentInnerWidth(m_parent.get()) - std::max(0, m_margin.left) - std::max(0, m_margin.right) - tablePaddingX;
+        int total = 0, fixedTotal = 0;
+        for (std::size_t i = 0; i < columnWidths.size(); ++i) {
+            total += columnWidths[i];
+            if (columnFixed[i])
+                fixedTotal += columnWidths[i];
+        }
+
+        if (avail > 0 && total > avail) {
+            const bool shrinkAll = fixedTotal >= avail || fixedTotal == total;
+            fixedColumnsShrunk = shrinkAll && fixedTotal > 0;
+            const int shrinkable = shrinkAll ? total : total - fixedTotal;
+            const int target = shrinkAll ? avail : avail - fixedTotal;
+            int acc = 0;
+            for (std::size_t i = 0; i < columnWidths.size(); ++i) {
+                if (shrinkAll || !columnFixed[i]) {
+                    columnWidths[i] = std::max<int>(1, static_cast<int>((static_cast<int64_t>(columnWidths[i]) * target) / shrinkable));
+                    acc += columnWidths[i];
+                }
+            }
+            for (std::size_t i = 0; acc < target && i < columnWidths.size(); ++i) {
+                if (shrinkAll || !columnFixed[i]) {
+                    ++columnWidths[i];
+                    ++acc;
+                }
+            }
+        }
+    }
+
     int resolvedContentWidth = 0;
     for (int width : columnWidths)
         resolvedContentWidth += width;
@@ -1207,6 +1558,9 @@ void UIWidget::updateTableLayout()
             if ((cell->m_width.unit == Unit::Auto || cell->m_width.unit == Unit::FitContent || cell->m_width.unit == Unit::Percent) && spanWidth > 0) {
                 cell->setWidth_px(targetContentWidth);
                 cell->m_width.applyUpdate(cell->getWidth(), SIZE_VERSION_COUNTER);
+            } else if (fixedColumnsShrunk && cell->m_width.unit == Unit::Px && spanWidth > 0 && cell->getWidth() > targetContentWidth) {
+                // Fixed columns were shrunk to fit: keep the cell inside its column so neighbours don't overlap.
+                cell->setWidth_px(targetContentWidth);
             }
 
             int distributedHeight = info.outerHeight;
@@ -1322,23 +1676,7 @@ void UIWidget::scheduleHtmlTask(FlagProp prop) {
         return;
 
     pendingFlush = true;
-    g_dispatcher.deferEvent([self = static_self_cast<UIWidget>()] {
-        for (const auto& widget : pendingWidgets) {
-            if (widget->hasProp(PropUpdateSize)) {
-                widget->updateSize();
-                widget->setProp(PropUpdateSize, false);
-            }
-
-            if (widget->hasProp(PropApplyAnchorAlignment)) {
-                widget->applyAnchorAlignment();
-                widget->setProp(PropApplyAnchorAlignment, false);
-            }
-        }
-
-        pendingWidgets.clear();
-        pendingFlush = false;
-        ++SIZE_VERSION_COUNTER;
-    });
+    g_dispatcher.deferEvent(&UIWidget::flushPendingHtmlWidgets);
 }
 
 void UIWidget::setOverflow(OverflowType type) {
@@ -1362,9 +1700,22 @@ void UIWidget::setOverflow(OverflowType type) {
     }
 }
 
+void UIWidget::setOverflow(std::string type) {
+    stdext::tolower(type);
+
+    OverflowType overflow = OverflowType::Visible;
+    if (type == "hidden") overflow = OverflowType::Hidden;
+    else if (type == "scroll") overflow = OverflowType::Scroll;
+    else if (type == "auto") overflow = OverflowType::Auto;
+    else if (type == "clip") overflow = OverflowType::Clip;
+
+    setOverflow(overflow);
+    setClipping(overflow == OverflowType::Clip || overflow == OverflowType::Scroll || overflow == OverflowType::Hidden);
+}
+
 void UIWidget::setPositions(std::string_view type, std::string_view value) {
     const Unit unit = detectUnit(value);
-    int16_t v = stdext::to_number(std::string(numericPart(value)));
+    int32_t v = stdext::to_number(std::string(numericPart(value)));
 
     if (type == "top") {
         m_positions.top.unit = unit;
@@ -1436,19 +1787,67 @@ void UIWidget::updateSize() {
 
     if (m_htmlNode && (m_htmlNode->getType() == NodeType::Text || m_htmlNode->getStyle("inherit-text") == "true")) {
         setProp(PropTextVerticalAutoResize, true);
+        const int prevWidth = getWidth();
+        int targetWidth = prevWidth;
         if (m_parent->m_width.unit == Unit::FitContent) {
             setProp(PropTextHorizontalAutoResize, true);
-            setWidth_px(m_realTextSize.width());
+            targetWidth = m_realTextSize.width();
+            // Table cells keep a content-sized unit but receive their final
+            // width from the table layout; wrap at that width.
+            if (m_parent->m_displayType == DisplayType::TableCell && m_parent->getWidth() > 0) {
+                const int cellInner = getParentInnerWidth(m_parent.get());
+                if (cellInner > 0 && cellInner < targetWidth) {
+                    setProp(PropTextHorizontalAutoResize, false);
+                    targetWidth = cellInner;
+                }
+            }
         } else {
             setProp(PropTextHorizontalAutoResize, false);
-            setWidth_px(m_parent->getSize().width());
+            targetWidth = m_parent->getSize().width();
+            // Fragments sharing a line with other inline content shrink to
+            // their text so the run can flow and wrap between siblings.
+            if (m_realTextSize.width() > 0 && isInMixedInlineRun(this))
+                targetWidth = std::min<int>(targetWidth, m_realTextSize.width());
         }
+        if (targetWidth != prevWidth) {
+            setWidth_px(targetWidth);
+            if (isInMixedInlineRun(this)) {
+                for (const auto& sibling : m_parent->m_children)
+                    sibling->scheduleHtmlTask(PropApplyAnchorAlignment);
+                if (m_parent->m_width.unit != Unit::FitContent)
+                    invalidateHtmlAncestorsHeight();
+            }
+        }
+
         updateText();
         return;
     }
 
-    const bool widthNeedsUpdate = m_width.needsUpdate(Unit::Auto, SIZE_VERSION_COUNTER) || m_width.needsUpdate(Unit::Percent, SIZE_VERSION_COUNTER);
-    const bool heightNeedsUpdate = m_height.needsUpdate(Unit::Percent, SIZE_VERSION_COUNTER);
+    const bool parentIsFlex =
+        m_parent && m_positionType != PositionType::Absolute &&
+        isFlexContainer(m_parent->m_displayType);
+
+    const bool parentIsColumnFlex =
+        m_parent && m_positionType != PositionType::Absolute &&
+        isFlexContainer(m_parent->m_displayType) &&
+        (m_parent->m_flexContainer.direction == FlexDirection::Column ||
+         m_parent->m_flexContainer.direction == FlexDirection::ColumnReverse);
+
+    // Intrinsic auto/fit-content sizing for flex items should run while the
+    // parent flex container is actively measuring/layouting its children.
+    // Running this outside that pass can overwrite sizes already assigned by
+    // parent flex (e.g. flex:1 in column layouts).
+    const bool parentInFlexLayoutPass = m_parent && m_parent->isInFlexLayout();
+
+    const bool widthNeedsUpdate =
+        (parentIsFlex && parentInFlexLayoutPass && (m_width.unit == Unit::Auto || m_width.unit == Unit::FitContent)
+            && (m_width.pendingUpdate || m_width.valueCalculed < 0 || getWidth() <= 0)) ||
+        m_width.needsUpdate(Unit::Auto, SIZE_VERSION_COUNTER) ||
+        m_width.needsUpdate(Unit::Percent, SIZE_VERSION_COUNTER);
+    const bool heightNeedsUpdate =
+        (parentIsColumnFlex && parentInFlexLayoutPass && (m_height.unit == Unit::Auto || m_height.unit == Unit::FitContent)
+            && (m_height.pendingUpdate || m_height.valueCalculed < 0 || getHeight() <= 0)) ||
+        m_height.needsUpdate(Unit::Percent, SIZE_VERSION_COUNTER);
 
     if (widthNeedsUpdate || heightNeedsUpdate) {
         auto width = -1;
@@ -1458,14 +1857,105 @@ void UIWidget::updateSize() {
             parent = parent->m_parent;
         }
         if (widthNeedsUpdate) {
-            width = parent->getWidth();
-            if (width > -1 && m_positionType != PositionType::Absolute)
-                width -= parent->getPaddingLeft() + parent->getPaddingRight();
+            // Flex items should use intrinsic width for auto/fit-content at this
+            // stage. Stretching on the cross-axis is handled later in layoutFlex.
+            const bool isFlexChild = parent && isFlexContainer(parent->m_displayType)
+                && (m_width.unit == Unit::Auto || m_width.unit == Unit::FitContent);
+            if (isFlexChild) {
+                // Temporarily set unit to FitContent so text node children
+                // use m_realTextSize.width() instead of expanding to parent width.
+                const Unit origUnit = m_width.unit;
+                m_width.pendingUpdate = true;
+                m_width.version = 0;
+                m_width.unit = Unit::FitContent;
+                int fitW = 0, fitH = 0;
+                applyFitContentRecursive(this, fitW, fitH);
+                // Ensure flex items drop stale block width even when the
+                // recursive measurement path did not write width this cycle.
+                int forcedW = std::max<int>(0, fitW + getPaddingLeft() + getPaddingRight());
+                if (forcedW <= 0 && !m_text.empty())
+                    forcedW = std::max<int>(0, m_realTextSize.width() + getPaddingLeft() + getPaddingRight());
+                const int prevW = getWidth();
+                if (std::abs(forcedW - prevW) <= 1)
+                    forcedW = prevW;
+                if (forcedW != prevW)
+                    setWidth_px(forcedW);
+                m_width.unit = origUnit;
+                m_width.applyUpdate(getWidth(), SIZE_VERSION_COUNTER);
+                width = -1;
+            } else {
+                width = parent->getWidth();
+                if (width > -1 && m_positionType != PositionType::Absolute)
+                    width -= parent->getPaddingLeft() + parent->getPaddingRight();
+            }
         }
         if (heightNeedsUpdate) {
-            height = parent->getHeight();
-            if (height > -1 && m_positionType != PositionType::Absolute)
-                height -= parent->getPaddingTop() + parent->getPaddingBottom();
+            // In a COLUMN flex container, auto-height items should use intrinsic
+            // content height (fit-content), not inherit parent height.
+            const bool isColumnFlex = parent && isFlexContainer(parent->m_displayType)
+                && (parent->m_flexContainer.direction == FlexDirection::Column
+                    || parent->m_flexContainer.direction == FlexDirection::ColumnReverse);
+            const bool isFlexChild = isColumnFlex
+                && (m_height.unit == Unit::Auto || m_height.unit == Unit::FitContent);
+
+            if (isFlexChild) {
+                const Unit origUnit = m_height.unit;
+                m_height.pendingUpdate = true;
+                m_height.version = 0;
+                m_height.unit = Unit::FitContent;
+
+                int forcedH = 0;
+                if (isFlexContainer(m_displayType)) {
+                    const bool rowMain = m_flexContainer.direction == FlexDirection::Row
+                        || m_flexContainer.direction == FlexDirection::RowReverse;
+                    const bool allowWrap = m_flexContainer.wrap != FlexWrap::NoWrap;
+                    const int oldH = getHeight();
+                    if (rowMain && allowWrap && getWidth() > 0) {
+                        layoutFlex(*this);
+                        forcedH = std::max<int>(0, getHeight());
+                    } else {
+                        int estimatedContent = 0;
+                        int childCount = 0;
+                        for (const auto& childPtr : getChildrenRef()) {
+                            UIWidget* child = childPtr.get();
+                            if (!child || child->getDisplay() == DisplayType::None || child->getPositionType() == PositionType::Absolute)
+                                continue;
+                            const int outerH = std::max<int>(0, child->getHeight()) + child->getMarginTop() + child->getMarginBottom();
+                            if (rowMain)
+                                estimatedContent = std::max(estimatedContent, outerH);
+                            else {
+                                estimatedContent += outerH;
+                                ++childCount;
+                            }
+                        }
+                        if (!rowMain && childCount > 1)
+                            estimatedContent += std::max<int>(0, m_flexContainer.rowGap) * (childCount - 1);
+
+                        forcedH = std::max<int>(0, estimatedContent + getPaddingTop() + getPaddingBottom());
+                    }
+                    if (forcedH <= 0 && oldH > 0)
+                        forcedH = oldH;
+                } else {
+                    int fitW = 0, fitH = 0;
+                    applyFitContentRecursive(this, fitW, fitH);
+                    forcedH = std::max<int>(0, fitH + getPaddingTop() + getPaddingBottom());
+                }
+
+                if (forcedH <= 0 && !m_text.empty())
+                    forcedH = std::max<int>(0, m_realTextSize.height() + getPaddingTop() + getPaddingBottom());
+                const int prevH = getHeight();
+                if (std::abs(forcedH - prevH) <= 1)
+                    forcedH = prevH;
+                if (forcedH != prevH)
+                    setHeight_px(forcedH);
+                m_height.unit = origUnit;
+                m_height.applyUpdate(getHeight(), SIZE_VERSION_COUNTER);
+                height = -1;
+            } else {
+                height = parent->getHeight();
+                if (height > -1 && m_positionType != PositionType::Absolute)
+                    height -= parent->getPaddingTop() + parent->getPaddingBottom();
+            }
         }
         if (width > -1 || height > -1) {
             updateDimension(this, width, height);
@@ -1475,7 +1965,10 @@ void UIWidget::updateSize() {
     if (m_positionType == PositionType::Absolute) {
         UIWidgetPtr cb = getVirtualParent();
         if (!cb) return;
-        cb->updateSize();
+        // Don't call updateSize on a container that is currently running flex layout,
+        // as this would re-enter layoutFlex and cause stack overflow.
+        if (!cb->isInFlexLayout())
+            cb->updateSize();
 
         const int pl = cb->getPaddingLeft();
         const int pr = cb->getPaddingRight();
@@ -1653,16 +2146,19 @@ void UIWidget::updateSize() {
         }
     }
 
-    if (m_children.empty()) {
+    if (m_children.empty() && m_text.empty()) {
         m_width.pendingUpdate = false;
         m_height.pendingUpdate = false;
         return;
     }
 
     if (m_width.needsUpdate(Unit::FitContent, SIZE_VERSION_COUNTER) || m_height.needsUpdate(Unit::FitContent, SIZE_VERSION_COUNTER)) {
-        int width = 0;
-        int height = 0;
-        applyFitContentRecursive(this, width, height);
+        // Skip fit-content for flex containers — layoutFlex handles sizing internally
+        if (m_displayType != DisplayType::Flex && m_displayType != DisplayType::InlineFlex) {
+            int width = 0;
+            int height = 0;
+            applyFitContentRecursive(this, width, height);
+        }
     }
 
     if (m_displayType == DisplayType::Flex || m_displayType == DisplayType::InlineFlex) {
@@ -1682,6 +2178,10 @@ void UIWidget::updateSize() {
         }
         if (tableAncestor && tableAncestor->m_displayType == DisplayType::Table)
             tableAncestor->updateTableLayout();
+    }
+
+    if (m_htmlNode && !m_text.empty()) {
+        updateText();
     }
 }
 
@@ -1705,8 +2205,46 @@ void UIWidget::applyAnchorAlignment() {
     if (m_parent && m_parent->getDisplay() == DisplayType::TableCell) {
         const auto ta = resolveCellTextAlign(this);
         const auto va = resolveCellVerticalAlign(this);
-        anchorHorizontalInCell(this, ta);
-        anchorVerticalInCell(this, va);
+
+        // A cell with several in-flow children must stack them like block
+        // flow; anchoring each child to the cell edges would overlap them.
+        const FlowContext cellCtx = computeFlowContext(this, DisplayType::TableCell, FloatType::None);
+        UIWidget* prev = cellCtx.lastNormalWidget;
+        bool hasNext = false;
+        bool afterSelf = false;
+        for (const auto& sp : m_parent->getChildrenRef()) {
+            UIWidget* c = sp.get();
+            if (c == this) { afterSelf = true; continue; }
+            if (afterSelf && !skipInFlow(c) && mapLogicalFloat(c->getFloat()) == FloatType::None) {
+                hasNext = true;
+                break;
+            }
+        }
+
+        if (!prev && !hasNext) {
+            anchorHorizontalInCell(this, ta);
+            anchorVerticalInCell(this, va);
+            return;
+        }
+
+        const bool inlineRun = prev && isInlineLike(m_displayType) && isInlineLike(prev->getDisplay());
+        UIWidget* lineAbove = nullptr;
+        const bool wraps = inlineRun && inlineRunWraps(this, lineAbove);
+        if (inlineRun && !wraps)
+            addAnchor(Fw::AnchorLeft, prev->getId().c_str(), Fw::AnchorRight);
+        else
+            anchorHorizontalInCell(this, ta);
+
+        // Stacked content is top-aligned; middle/bottom alignment of a group
+        // cannot be expressed with per-child anchors.
+        if (!prev)
+            addAnchor(Fw::AnchorTop, "parent", Fw::AnchorTop);
+        else if (wraps)
+            addAnchor(Fw::AnchorTop, lineAbove->getId().c_str(), Fw::AnchorBottom);
+        else if (inlineRun)
+            addAnchor(Fw::AnchorVerticalCenter, prev->getId().c_str(), Fw::AnchorVerticalCenter);
+        else
+            addAnchor(Fw::AnchorTop, prev->getId().c_str(), Fw::AnchorBottom);
         return;
     }
 
@@ -1749,23 +2287,28 @@ void UIWidget::applyAnchorAlignment() {
     if (parentDisplay == DisplayType::InlineBlock || parentDisplay == DisplayType::Block || parentDisplay == DisplayType::TableCell) {
         bool anchored = true;
         const auto isInline = isInlineLike(m_displayType);
+        const bool sameRun =
+            isInline && ctx.lastNormalWidget && isInlineLike(ctx.lastNormalWidget->getDisplay());
+        UIWidget* lineAbove = nullptr;
+        const bool wrapsLine = sameRun && inlineRunWraps(this, lineAbove);
+        const bool continueInlineRun = sameRun && !wrapsLine;
 
-        if (isInline && m_parent->getTextAlign() == Fw::AlignCenter ||
-            !isInline && m_parent->getJustifyItems() == JustifyItemsType::Center) {
-            if (ctx.lastNormalWidget)
+        if ((isInline && m_parent->getTextAlign() == Fw::AlignCenter) ||
+            (!isInline && m_parent->getJustifyItems() == JustifyItemsType::Center)) {
+            if (continueInlineRun)
                 addAnchor(Fw::AnchorLeft, ctx.lastNormalWidget->getId().c_str(), Fw::AnchorRight);
             else
                 addAnchor(Fw::AnchorHorizontalCenter, "parent", Fw::AnchorHorizontalCenter);
         } else if (m_positionType != PositionType::Absolute) {
-            if (isInline && m_parent->getTextAlign() == Fw::AlignLeft ||
-                !isInline && m_parent->getJustifyItems() == JustifyItemsType::Left) {
-                if (ctx.lastNormalWidget)
+            if ((isInline && m_parent->getTextAlign() == Fw::AlignLeft) ||
+                (!isInline && m_parent->getJustifyItems() == JustifyItemsType::Left)) {
+                if (continueInlineRun)
                     addAnchor(Fw::AnchorLeft, ctx.lastNormalWidget->getId().c_str(), Fw::AnchorRight);
                 else
                     addAnchor(Fw::AnchorLeft, "parent", Fw::AnchorLeft);
-            } else if (isInline && m_parent->getTextAlign() == Fw::AlignRight ||
-                       !isInline && m_parent->getJustifyItems() == JustifyItemsType::Right) {
-                if (ctx.lastNormalWidget)
+            } else if ((isInline && m_parent->getTextAlign() == Fw::AlignRight) ||
+                       (!isInline && m_parent->getJustifyItems() == JustifyItemsType::Right)) {
+                if (continueInlineRun)
                     addAnchor(Fw::AnchorRight, "next", Fw::AnchorLeft);
                 else
                     addAnchor(Fw::AnchorRight, "parent", Fw::AnchorRight);
@@ -1788,9 +2331,13 @@ void UIWidget::applyAnchorAlignment() {
         if (anchored) {
             if (!ctx.lastNormalWidget) {
                 addAnchor(Fw::AnchorTop, "parent", Fw::AnchorTop);
+            } else if (wrapsLine) {
+                addAnchor(Fw::AnchorTop, lineAbove->getId().c_str(), Fw::AnchorBottom);
             } else {
+                // Items sharing a line box are centered on each other; the line
+                // leader is offset in UIAnchorLayout so the tallest item fits.
                 if (isInlineLike(m_displayType) && isInlineLike(ctx.lastNormalWidget->getDisplay()))
-                    addAnchor(Fw::AnchorTop, ctx.lastNormalWidget->getId().c_str(), Fw::AnchorTop);
+                    addAnchor(Fw::AnchorVerticalCenter, ctx.lastNormalWidget->getId().c_str(), Fw::AnchorVerticalCenter);
                 else
                     addAnchor(Fw::AnchorTop, ctx.lastNormalWidget->getId().c_str(), Fw::AnchorBottom);
             }
@@ -1803,8 +2350,11 @@ void UIWidget::applyAnchorAlignment() {
 
     if (effFloat == FloatType::Left || effFloat == FloatType::Right)
         applyFloat(this, ctx, effFloat, topCleared);
-    else if (isFlexContainer(parentDisplay))
-        applyFlex(this, ctx, topCleared);
+    else if (isFlexContainer(parentDisplay)) {
+        // Flex children are positioned directly by layoutFlex() via setRect(),
+        // not by the anchor system. Skip anchor setup to avoid conflicts.
+        return;
+    }
     else if (isGridContainer(parentDisplay))
         applyGridOrTable(this, ctx, topCleared);
     else if (isTableBox(parentDisplay)) {
