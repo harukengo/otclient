@@ -1,0 +1,20 @@
+name: BRTibia - Android
+
+# Compila o APK Android do branch brtibia so quando pedido (Actions > BRTibia - Android > Run workflow).
+# O APK sai sem Tibia.spr/Tibia.dat (nao ficam no repositorio); eles sao colocados na remontagem.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: brtibia-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    name: Build - Android
+    uses: ./.github/workflows/reusable-build-android-apk.yml
+    secrets: inherit
