@@ -1868,6 +1868,10 @@ function setupViewMode(mode)
         bottomSplitter:setVisible(false)
         local limit = limitedZoom
         gameMapPanel:setLimitVisibleRange(limit)
+        -- BRTibia: com a area limitada (15x11, o que o servidor 8.60 envia), o mapa precisa
+        -- caber inteiro na tela. Sem isto, em celular largo (20:9) ele era esticado para a
+        -- largura e cortava em cima/embaixo: so ~3 quadrados visiveis acima do personagem.
+        gameMapPanel:setKeepAspectRatio(limit)
         gameMapPanel:setZoom(11)
         gameMapPanel:setVisibleDimension({
             width = 15,
