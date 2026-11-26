@@ -26,6 +26,8 @@
 #include <framework/core/unzipper.h>
 #include <framework/core/resourcemanager.h>
 #include <framework/sound/soundmanager.h>
+#include <fstream>
+#include <zlib.h>
 
 AndroidManager g_androidManager;
 
@@ -117,23 +119,48 @@ void AndroidManager::setClipboardText(const std::string& text) {
 void AndroidManager::unZipAssetData() {
     std::string destFolder = getAppBaseDir() + "/game_data/";
 
+    // BRTibia: antes os arquivos do jogo eram extraidos so na primeira abertura (se init.lua
+    // existisse, nada era feito), entao atualizar o APK nao atualizava modulos/imagens/spr.
+    // Agora guardamos uma "assinatura" do data.zip (tamanho + CRC do final do zip, onde fica o
+    // diretorio central com o CRC de cada arquivo) e extraimos de novo quando ela muda.
+    // Os arquivos sao sobrescritos; configuracoes do jogador nao ficam no data.zip.
     const std::filesystem::path initLua { destFolder + "init.lua" };
-    if (std::filesystem::exists(initLua)) {
-        return;
-    }
+    const std::string marcadorPath = destFolder + ".brtibia_data_versao";
 
     AAsset* dataAsset = AAssetManager_open(
             m_app->activity->assetManager,
             "data.zip",
-            AASSET_MODE_BUFFER);
+            AASSET_MODE_RANDOM);
 
     if (!dataAsset) {
         g_logger.fatal("Failed to open data.zip from APK assets. Run setup_android_deps.sh to generate it.");
         return;
     }
 
-    auto dataFileLength = AAsset_getLength(dataAsset);
+    const off64_t dataFileLength = AAsset_getLength64(dataAsset);
+    const off64_t tamanhoFinal = std::min<off64_t>(dataFileLength, 1 << 20);
+    std::string finalZip(static_cast<size_t>(tamanhoFinal), '\0');
+    AAsset_seek64(dataAsset, dataFileLength - tamanhoFinal, SEEK_SET);
+    AAsset_read(dataAsset, finalZip.data(), static_cast<size_t>(tamanhoFinal));
+    const uLong crc = crc32(0L, reinterpret_cast<const Bytef*>(finalZip.data()), static_cast<uInt>(finalZip.size()));
+    const std::string marcador = std::to_string(static_cast<long long>(dataFileLength)) + ":" + std::to_string(crc);
+
+    if (std::filesystem::exists(initLua)) {
+        std::ifstream in(marcadorPath, std::ios::binary);
+        std::string atual((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (atual == marcador) {
+            AAsset_close(dataAsset);
+            return;
+        }
+    }
+
+    AAsset_seek64(dataAsset, 0, SEEK_SET);
     char* dataContent = (char *) malloc(dataFileLength + 1);
+    if (!dataContent) {
+        AAsset_close(dataAsset);
+        g_logger.fatal("Not enough memory to extract data.zip.");
+        return;
+    }
     AAsset_read(dataAsset, dataContent, dataFileLength);
     dataContent[dataFileLength] = '\0';
 
@@ -141,6 +168,9 @@ void AndroidManager::unZipAssetData() {
 
     AAsset_close(dataAsset);
     free(dataContent);
+
+    std::ofstream out(marcadorPath, std::ios::binary | std::ios::trunc);
+    out << marcador;
 }
 
 std::string AndroidManager::getAppBaseDir() {
