@@ -89,7 +89,18 @@ context.NPC.sell = function(item, count, ignoreEquipped)
   if ignoreEquipped == nil then
     ignoreEquipped = true
   end
-  g_game.sellItem(item, count, ignoreEquipped)
+  -- BRTibia: passa pela fila de vendas do cliente (o servidor aceita 1 venda a cada 200 ms)
+  if modules.game_npctrade and modules.game_npctrade.brtibiaVenderFila then
+    local fila = {}
+    while count > 0 do
+      local n = math.min(count, 100)
+      table.insert(fila, {item, n, ignoreEquipped})
+      count = count - n
+    end
+    modules.game_npctrade.brtibiaVenderFila(fila)
+  else
+    g_game.sellItem(item, count, ignoreEquipped)
+  end
 end
 
 context.NPC.buy = function(item, count, ignoreCapacity, withBackpack)

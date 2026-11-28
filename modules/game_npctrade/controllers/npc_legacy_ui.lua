@@ -551,12 +551,18 @@ function getBuyItemsLegacy()
     return tradeItems[BUY] or {}
 end
 
-function sellAllLegacy()
+function sellAllLegacy(delayed, exceptions)
     -- BRTibia: em fila com intervalo (o servidor aceita uma venda a cada 200 ms) e no
     -- maximo 100 por envio (o pacote de venda do 8.60 leva a quantidade em 1 byte).
+    -- Respeita a lista de itens que o vBot manda NAO vender (antes era ignorada).
+    if type(delayed) == "table" then
+        exceptions = delayed
+    end
+    exceptions = exceptions or {}
     local queue = {}
-    local ignorar = ignoreEquipped:isChecked()
-    for itemid, _ in pairs(playerItems) do
+    local ignorar = ignoreEquipped and ignoreEquipped:isChecked() or false
+    for itemid, _ in pairs(playerItems or {}) do
+        if not table.find(exceptions, itemid) then
         local item = Item.create(itemid)
         local amount = getSellQuantityLegacy(item)
         while amount > 0 do
@@ -564,6 +570,7 @@ function sellAllLegacy()
             table.insert(queue, {item, n, ignorar})
             amount = amount - n
         end
+        end
     end
-    brtibiaVenderFila(queue)
+    brtibiaVenderFila(queue, true)
 end

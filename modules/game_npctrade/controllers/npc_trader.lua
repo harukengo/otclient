@@ -553,33 +553,57 @@ function controllerNpcTrader:filterTradeList(searchText)
 end
 
 local BRTIBIA_INTERVALO_VENDA = 350
+local brtibiaFila = {}
 local brtibiaFilaEvento = nil
-function brtibiaVenderFila(queue)
-    if brtibiaFilaEvento then
-        removeEvent(brtibiaFilaEvento)
-        brtibiaFilaEvento = nil
+local brtibiaUltimaVenda = -BRTIBIA_INTERVALO_VENDA
+
+local function brtibiaProximaVenda()
+    brtibiaFilaEvento = nil
+    if not g_game.isOnline() then
+        brtibiaFila = {}
+        return
     end
-    local i = 0
-    local function proximo()
-        brtibiaFilaEvento = nil
-        i = i + 1
-        local entry = queue[i]
-        if not entry or not g_game.isOnline() then
-            return
-        end
-        g_game.sellItem(entry[1], entry[2], entry[3])
-        if queue[i + 1] then
-            brtibiaFilaEvento = scheduleEvent(proximo, BRTIBIA_INTERVALO_VENDA)
-        end
+    local espera = brtibiaUltimaVenda + BRTIBIA_INTERVALO_VENDA - g_clock.millis()
+    if espera > 0 then
+        brtibiaFilaEvento = scheduleEvent(brtibiaProximaVenda, espera)
+        return
     end
-    proximo()
+    local entry = table.remove(brtibiaFila, 1)
+    if not entry then
+        return
+    end
+    brtibiaUltimaVenda = g_clock.millis()
+    g_game.sellItem(entry[1], entry[2], entry[3])
+    if #brtibiaFila > 0 then
+        brtibiaFilaEvento = scheduleEvent(brtibiaProximaVenda, BRTIBIA_INTERVALO_VENDA)
+    end
+end
+
+-- BRTibia: o servidor aceita uma venda a cada 200 ms ("You have to wait a bit before selling
+-- again"). Todas as vendas do cliente e do bot passam por esta fila, uma a cada 350 ms.
+-- substituir = true descarta o que ainda estava na fila (o "vender tudo" recalcula tudo).
+function brtibiaVenderFila(queue, substituir)
+    if substituir then
+        brtibiaFila = {}
+    end
+    for _, entry in ipairs(queue) do
+        table.insert(brtibiaFila, entry)
+    end
+    if not brtibiaFilaEvento then
+        brtibiaProximaVenda()
+    end
 end
 
 function brtibiaCancelarFilaVenda()
+    brtibiaFila = {}
     if brtibiaFilaEvento then
         removeEvent(brtibiaFilaEvento)
         brtibiaFilaEvento = nil
     end
+end
+
+function brtibiaVendendo()
+    return #brtibiaFila > 0
 end
 
 function controllerNpcTrader:sellAll(delayed, exceptions)
@@ -608,7 +632,7 @@ function controllerNpcTrader:sellAll(delayed, exceptions)
                 local maxAmount = math.min(sellQuantity, maxPossible)
 
                 if delayed then
-                    g_game.sellItem(entry.ptr, maxAmount, self.ignoreEquipped)
+                    brtibiaVenderFila({{entry.ptr, maxAmount, self.ignoreEquipped}}, true)
                     self.sellAllWithDelayEvent = scheduleEvent(function()
                         self:sellAll(true, exceptions)
                     end, 1100)
@@ -623,5 +647,5 @@ function controllerNpcTrader:sellAll(delayed, exceptions)
 
     -- BRTibia: o servidor recusa uma venda a cada 200 ms ("You have to wait a bit before
     -- selling again"). Envia a fila com intervalo, em vez de tudo no mesmo instante.
-    brtibiaVenderFila(queue)
+    brtibiaVenderFila(queue, true)
 end
