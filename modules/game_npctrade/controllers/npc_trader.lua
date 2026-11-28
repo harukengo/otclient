@@ -470,7 +470,7 @@ function controllerNpcTrader:executeTrade()
     if self.tradeMode == controllerNpcTrader.BUY then
         g_game.buyItem(self.selectedItem.ptr, self.amount, self.ignoreCapacity, self.buyWithBackpack)
     else
-        g_game.sellItem(self.selectedItem.ptr, self.amount, self.ignoreEquipped)
+        brtibiaVenderFila({{self.selectedItem.ptr, self.amount, self.ignoreEquipped}})
     end
 end
 
@@ -552,10 +552,12 @@ function controllerNpcTrader:filterTradeList(searchText)
     end
 end
 
-local BRTIBIA_INTERVALO_VENDA = 350
+local BRTIBIA_INTERVALO_VENDA = 600   -- folga para atraso/oscilacao da internet
 local brtibiaFila = {}
 local brtibiaFilaEvento = nil
 local brtibiaUltimaVenda = -BRTIBIA_INTERVALO_VENDA
+local brtibiaUltimaEntrada = nil
+local brtibiaRepeticoes = 0
 
 local function brtibiaProximaVenda()
     brtibiaFilaEvento = nil
@@ -572,6 +574,7 @@ local function brtibiaProximaVenda()
     if not entry then
         return
     end
+    brtibiaUltimaEntrada = entry
     brtibiaUltimaVenda = g_clock.millis()
     g_game.sellItem(entry[1], entry[2], entry[3])
     if #brtibiaFila > 0 then
@@ -592,6 +595,26 @@ function brtibiaVenderFila(queue, substituir)
     if not brtibiaFilaEvento then
         brtibiaProximaVenda()
     end
+end
+
+-- Se mesmo assim o servidor recusar ("wait a bit"), a mesma venda volta para o inicio da
+-- fila e e repetida depois de 1 s (no maximo 5 vezes seguidas).
+function brtibiaVendaRecusada()
+    if not brtibiaUltimaEntrada or brtibiaRepeticoes >= 5 then
+        return
+    end
+    brtibiaRepeticoes = brtibiaRepeticoes + 1
+    table.insert(brtibiaFila, 1, brtibiaUltimaEntrada)
+    brtibiaUltimaEntrada = nil
+    brtibiaUltimaVenda = g_clock.millis() + 400
+    if brtibiaFilaEvento then
+        removeEvent(brtibiaFilaEvento)
+    end
+    brtibiaFilaEvento = scheduleEvent(brtibiaProximaVenda, 1000)
+end
+
+function brtibiaVendaAceita()
+    brtibiaRepeticoes = 0
 end
 
 function brtibiaCancelarFilaVenda()

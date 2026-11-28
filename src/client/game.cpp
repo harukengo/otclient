@@ -1390,7 +1390,10 @@ void Game::sellItem(const ItemPtr& item, const uint16_t amount, const bool ignor
     if (!canPerformGameAction() || !item)
         return;
 
-    m_protocolGame->sendSellItem(item->getId(), item->getSubType(), amount, ignoreEquipped);
+    // BRTibia: no 8.60 o getSubType() devolve 1 para item comum, mas o servidor (como o cliente
+    // classico) espera 0 na venda; so fluidos/splash levam o subtipo de verdade.
+    const uint8_t subType = (item->isSplash() || item->isFluidContainer()) ? item->getSubType() : 0;
+    m_protocolGame->sendSellItem(item->getId(), subType, amount, ignoreEquipped);
 }
 
 void Game::closeNpcTrade()

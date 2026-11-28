@@ -33,6 +33,16 @@ function controllerNpcTrader:onGameStart()
                 self:onOpenNpcTrade(...)
             end
         end,
+        onTextMessage = function(mode, text)
+            -- BRTibia: venda recusada pelo intervalo do servidor -> repete a mesma venda
+            if type(text) == 'string' then
+                if text:find('wait a bit before selling', 1, true) then
+                    if brtibiaVendaRecusada then brtibiaVendaRecusada() end
+                elseif text:find('^Sold ') then
+                    if brtibiaVendaAceita then brtibiaVendaAceita() end
+                end
+            end
+        end,
         onPlayerGoods = function(money, items)
             if self:isLegacyMode() then
                 onPlayerGoods(money, items)

@@ -160,7 +160,7 @@ function onTradeClick()
         g_game.buyItem(selectedItem.ptr, quantityScroll:getValue(), ignoreCapacity:isChecked(),
                        buyWithBackpack:isChecked())
     else
-        g_game.sellItem(selectedItem.ptr, quantityScroll:getValue(), ignoreEquipped:isChecked())
+        brtibiaVenderFila({{selectedItem.ptr, quantityScroll:getValue(), ignoreEquipped:isChecked()}})
     end
 end
 
