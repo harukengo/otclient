@@ -552,11 +552,18 @@ function getBuyItemsLegacy()
 end
 
 function sellAllLegacy()
-    for itemid, item in pairs(playerItems) do
+    -- BRTibia: em fila com intervalo (o servidor aceita uma venda a cada 200 ms) e no
+    -- maximo 100 por envio (o pacote de venda do 8.60 leva a quantidade em 1 byte).
+    local queue = {}
+    local ignorar = ignoreEquipped:isChecked()
+    for itemid, _ in pairs(playerItems) do
         local item = Item.create(itemid)
         local amount = getSellQuantityLegacy(item)
-        if amount > 0 then
-            g_game.sellItem(item, amount, ignoreEquipped:isChecked())
+        while amount > 0 do
+            local n = math.min(amount, 100)
+            table.insert(queue, {item, n, ignorar})
+            amount = amount - n
         end
     end
+    brtibiaVenderFila(queue)
 end

@@ -8,10 +8,10 @@
 import sys, os, numpy as np, cv2
 from PIL import Image
 src, dst = sys.argv[1], sys.argv[2]
-BASE = np.array([7, 10, 20], np.float32) / 255.0        # #070A14
-BOTAO = np.array([16, 24, 46], np.float32) / 255.0
+BASE = np.array([13, 19, 36], np.float32) / 255.0       # #0D1324 (v3: um pouco mais claro, mais contraste)
+BOTAO = np.array([26, 39, 72], np.float32) / 255.0
 NEON = np.array([46, 128, 255], np.float32) / 255.0
-LINHA = np.array([30, 52, 96], np.float32) / 255.0       # divisao interna discreta
+LINHA = np.array([52, 86, 150], np.float32) / 255.0      # divisao interna (v3: mais visivel)
 CLARO = np.array([0.82, 0.88, 1.0], np.float32)          # tom dos detalhes claros (icones/setas)
 n = 0
 for raiz, _, arqs in os.walk(src):
@@ -35,7 +35,7 @@ for raiz, _, arqs in os.walk(src):
         nome = a.lower()
         if 'slot' in nome or nome.startswith('inventory_'):
             tint = np.array([0.55, 0.68, 1.0], np.float32)
-            novo = np.clip(lum[..., None] * 0.62 * tint, 0, 1)
+            novo = np.clip(lum[..., None] * 0.95 * tint + 0.025, 0, 1)   # v3: slots mais claros (itens escuros aparecem)
             wgt = peso[..., None]
             x[..., :3] = rgb * (1 - wgt) + novo * wgt
             Image.fromarray((x * 255 + 0.5).astype(np.uint8), 'RGBA').save(q); n += 1

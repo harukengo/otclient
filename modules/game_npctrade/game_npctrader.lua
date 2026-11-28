@@ -113,6 +113,9 @@ function controllerNpcTrader:onCloseNpcTrade()
             removeEvent(controllerNpcTrader.sellAllWithDelayEvent)
             controllerNpcTrader.sellAllWithDelayEvent = nil
         end
+        if brtibiaCancelarFilaVenda then
+            brtibiaCancelarFilaVenda()
+        end
         -- Clean up state
         controllerNpcTrader.buyItems = {}
         controllerNpcTrader.sellItems = {}
